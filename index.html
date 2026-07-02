@@ -1,0 +1,3162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Munch Munch!</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    height: 100dvh;
+    font-family: 'Segoe UI', sans-serif;
+    overflow: hidden;
+    user-select: none;
+    touch-action: none;
+  }
+  @media (max-width: 600px) {
+    #canvas { border-radius: 0 !important; width: 100vw !important; }
+    #hud { gap: 16px; font-size: 14px; margin-bottom: 4px; }
+    #hint { font-size: 10px; }
+  }
+  #hud {
+    display: flex;
+    gap: 36px;
+    margin-bottom: 8px;
+    align-items: center;
+    height: 32px;
+  }
+  .stat { color:#fff; font-size:17px; font-weight:bold; text-shadow:0 0 10px rgba(255,200,50,0.8); }
+  .stat span { color:#ffd700; font-size:20px; }
+  #canvas { border-radius:16px; cursor:crosshair; box-shadow:0 0 40px rgba(100,100,255,0.3); display:block; }
+  #hint { color:#aaa; font-size:12px; margin-top:7px; letter-spacing:1px; }
+
+  #boss-bar-wrap {
+    width:100%; max-width:1200px; overflow:hidden;
+    max-height:0; transition:max-height 0.3s;
+    margin-bottom:0;
+  }
+  #boss-bar-wrap.visible { max-height:40px; margin-bottom:6px; }
+  #boss-label { font-size:12px; font-weight:bold; text-align:center; letter-spacing:2px; margin-bottom:3px; }
+  #boss-track { width:100%; height:13px; background:rgba(255,255,255,0.1); border-radius:8px; overflow:hidden; }
+  #boss-fill { height:100%; width:100%; border-radius:8px; transition:width 0.2s, background 0.5s; }
+
+  /* ── Leaderboard overlay ── */
+  #lb-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.82);
+    z-index: 10;
+    align-items: center;
+    justify-content: center;
+  }
+  #lb-overlay.show { display: flex; }
+  #lb-box {
+    background: linear-gradient(160deg,#16213e,#0f3460);
+    border: 1px solid rgba(108,99,255,0.4);
+    border-radius: 18px;
+    padding: 32px 40px;
+    width: min(520px, 94vw);
+    box-shadow: 0 0 60px rgba(108,99,255,0.3);
+    text-align: center;
+    color: #fff;
+  }
+  #lb-box h2 { font-size: 26px; margin-bottom: 10px; color: #ffd700; text-shadow: 0 0 16px #ffd700; }
+  #lb-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+  .lb-tab { flex:1; padding: 8px; border-radius: 8px; border: 1px solid #333; background: #1a1a30; color: #888; font-size: 14px; font-weight: bold; cursor: pointer; transition: all 0.15s; }
+  .lb-tab.active { background: #6c63ff; border-color: #6c63ff; color: #fff; box-shadow: 0 0 12px rgba(108,99,255,0.5); }
+  .lb-tab:hover:not(.active) { border-color: #555; color: #ccc; }
+  #lb-box p.sub { font-size: 13px; color: #888; margin-bottom: 16px; }
+  #lb-name-row { display: flex; gap: 10px; margin-bottom: 18px; }
+  #lb-name { flex:1; padding: 10px 14px; border-radius: 10px; border: 1px solid #444;
+    background: #0a0a20; color: #fff; font-size: 16px; outline: none; }
+  #lb-name:focus { border-color: #6c63ff; box-shadow: 0 0 0 2px rgba(108,99,255,0.3); }
+  #lb-submit {
+    padding: 10px 20px; border-radius: 10px; border: none;
+    background: linear-gradient(135deg,#6c63ff,#4c1d95);
+    color: #fff; font-size: 15px; font-weight: bold; cursor: pointer;
+    transition: opacity 0.2s;
+  }
+  #lb-submit:hover { opacity: 0.85; }
+  #lb-submit:disabled { opacity: 0.4; cursor: default; }
+  #lb-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  #lb-table th { color: #888; font-size: 12px; text-transform: uppercase;
+    letter-spacing: 1px; padding: 6px 0; border-bottom: 1px solid #222; }
+  #lb-table td { padding: 9px 6px; font-size: 15px; border-bottom: 1px solid #1a1a30; }
+  #lb-table tr:first-child td { color: #ffd700; font-weight: bold; }
+  #lb-table tr:nth-child(2) td { color: #c0c0c0; }
+  #lb-table tr:nth-child(3) td { color: #cd7f32; }
+  .rank-medal { font-size: 18px; }
+  #lb-status { font-size: 13px; color: #888; min-height: 20px; margin-bottom: 12px; }
+  #lb-close {
+    padding: 9px 28px; border-radius: 10px; border: none;
+    background: #222; color: #aaa; font-size: 14px; cursor: pointer;
+  }
+  #lb-close:hover { background: #333; color: #fff; }
+
+  /* ── Suggestions overlay ── */
+  #sg-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.82); z-index: 10;
+    align-items: center; justify-content: center;
+  }
+  #sg-overlay.show { display: flex; }
+  #sg-box {
+    background: linear-gradient(160deg,#16213e,#0f3460);
+    border: 1px solid rgba(232,121,249,0.4);
+    border-radius: 18px; padding: 28px 32px;
+    width: min(480px, 94vw); max-height: 80vh;
+    box-shadow: 0 0 60px rgba(232,121,249,0.2);
+    color: #fff; display: flex; flex-direction: column; gap: 14px;
+  }
+  #sg-box h2 { font-size: 22px; color: #e879f9; text-shadow: 0 0 14px #e879f9; text-align:center; }
+  #sg-input-row { display: flex; gap: 8px; }
+  #sg-input {
+    flex: 1; padding: 10px 14px; border-radius: 10px;
+    border: 1px solid #444; background: #0a0a20;
+    color: #fff; font-size: 14px; outline: none;
+  }
+  #sg-input:focus { border-color: #e879f9; box-shadow: 0 0 0 2px rgba(232,121,249,0.25); }
+  #sg-submit {
+    padding: 10px 18px; border-radius: 10px; border: none;
+    background: linear-gradient(135deg,#e879f9,#7c3aed);
+    color: #fff; font-size: 14px; font-weight: bold; cursor: pointer;
+  }
+  #sg-submit:hover { opacity: 0.85; }
+  #sg-list { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; max-height: 340px; }
+  .sg-item {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 10px; padding: 10px 14px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    font-size: 14px; color: #e2e8f0;
+  }
+  .sg-item span { flex:1; }
+  .sg-del { background: none; border: none; color: #ef4444; font-size: 18px; cursor: pointer; padding: 0 4px; }
+  .sg-del:hover { color: #ff6b6b; }
+  #sg-status { font-size: 12px; color: #888; text-align:center; min-height:16px; }
+  #sg-close {
+    padding: 8px 24px; border-radius: 10px; border: none;
+    background: #222; color: #aaa; font-size: 14px; cursor: pointer; align-self:center;
+  }
+  #sg-close:hover { background: #333; color: #fff; }
+  #sg-pin-row { display:none; gap:8px; align-items:center; }
+  #sg-pin-row.show { display:flex; }
+  #sg-pin { width:110px; padding:7px 10px; border-radius:8px; border:1px solid #555; background:#0a0a20; color:#fff; font-size:13px; outline:none; }
+  #sg-pin-confirm { padding:7px 14px; border-radius:8px; border:none; background:#ef4444; color:#fff; font-size:13px; cursor:pointer; }
+</style>
+</head>
+<body>
+
+<div id="hud">
+  <div class="stat">🍽️ Eaten: <span id="score">0</span></div>
+  <div class="stat">📏 Size: <span id="size">1.0x</span></div>
+  <div class="stat" id="timer-stat">⏱️ Time: <span id="timer">60</span>s</div>
+</div>
+
+<div id="boss-bar-wrap">
+  <div id="boss-label"></div>
+  <div id="boss-track"><div id="boss-fill"></div></div>
+</div>
+
+<canvas id="canvas"></canvas>
+<div id="hint">Move: WASD / Arrow Keys &nbsp;·&nbsp; Eat food to grow!</div>
+
+<!-- Suggestions overlay -->
+<div id="sg-overlay">
+  <div id="sg-box">
+    <h2>💡 Suggestions</h2>
+    <div id="sg-input-row">
+      <input id="sg-input" maxlength="120" placeholder="Suggest a feature..." autocomplete="off"/>
+      <button id="sg-submit">Send</button>
+    </div>
+    <div id="sg-status"></div>
+    <div id="sg-list"><div style="color:#555;padding:12px;text-align:center">Loading...</div></div>
+    <div id="sg-pin-row">
+      <input id="sg-pin" type="password" placeholder="Admin PIN..." maxlength="20"/>
+      <button id="sg-pin-confirm">Delete</button>
+    </div>
+    <button id="sg-close">Close</button>
+  </div>
+</div>
+
+<!-- Leaderboard overlay -->
+<div id="lb-overlay">
+  <div id="lb-box">
+    <h2>🏆 Leaderboard</h2>
+    <div id="lb-tabs">
+      <button class="lb-tab active" data-tab="timed">⏱️ Timed</button>
+      <button class="lb-tab" data-tab="bossrush">💀 Boss Rush</button>
+    </div>
+    <p class="sub" id="lb-subtitle">Top scores — 60 second sprint</p>
+    <div id="lb-name-row" style="display:none">
+      <input id="lb-name" maxlength="20" placeholder="Your name..." autocomplete="off" />
+      <button id="lb-submit">Submit</button>
+    </div>
+    <div id="lb-status"></div>
+    <table id="lb-table">
+      <thead id="lb-thead"><tr><th>#</th><th>Player</th><th>Score</th><th>Date</th></tr></thead>
+      <tbody id="lb-body"><tr><td colspan="4" style="color:#555;padding:20px">Loading...</td></tr></tbody>
+    </table>
+    <button id="lb-close">Close</button>
+  </div>
+</div>
+
+<script>
+// ── Supabase config — fill these in after creating your project ──
+const SUPABASE_URL = 'https://nxeyrcpycmtyxjucnoyj.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im54ZXlyY3B5Y210eXhqdWNub3lqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE0NjM1NjgsImV4cCI6MjA5NzAzOTU2OH0.X6RKOAz7Lv5Bw5s6KA0Ab-b4v9jwVKhfZbM9lUhcLcI';
+
+// ── Suggestions ───────────────────────────────────────────────
+const ADMIN_PIN = 'munch2025'; // change this to whatever you want
+const sgOverlay = document.getElementById('sg-overlay');
+const sgList    = document.getElementById('sg-list');
+const sgInput   = document.getElementById('sg-input');
+const sgStatus  = document.getElementById('sg-status');
+const sgPinRow  = document.getElementById('sg-pin-row');
+const sgPin     = document.getElementById('sg-pin');
+let sgPendingDeleteId = null;
+
+function sgSetStatus(msg, color='#888') { sgStatus.textContent=msg; sgStatus.style.color=color; }
+
+async function loadSuggestions() {
+  sgList.innerHTML = '<div style="color:#555;padding:12px;text-align:center">Loading...</div>';
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/suggestions?select=id,text,created_at&order=created_at.asc`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    const rows = await res.json();
+    if (!rows.length) { sgList.innerHTML='<div style="color:#555;padding:12px;text-align:center">No suggestions yet — be the first!</div>'; return; }
+    sgList.innerHTML = rows.map(r => `
+      <div class="sg-item" data-id="${r.id}">
+        <span>${escHtml(r.text)}</span>
+        <button class="sg-del" title="Delete">🗑️</button>
+      </div>`).join('');
+    sgList.querySelectorAll('.sg-del').forEach(btn => {
+      btn.addEventListener('click', () => {
+        sgPendingDeleteId = btn.closest('.sg-item').dataset.id;
+        sgPinRow.classList.add('show');
+        sgPin.focus();
+      });
+    });
+  } catch(e) { sgList.innerHTML='<div style="color:#ef4444;padding:12px;text-align:center">Failed to load</div>'; }
+}
+
+async function submitSuggestion() {
+  const text = sgInput.value.trim();
+  if (!text) return;
+  sgInput.disabled = true;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/suggestions`, {
+      method: 'POST',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ text })
+    });
+    sgInput.value = '';
+    sgSetStatus('✅ Suggestion sent!', '#4ade80');
+    setTimeout(()=>sgSetStatus(''), 2000);
+    loadSuggestions();
+  } catch(e) { sgSetStatus('❌ Failed to send', '#ef4444'); }
+  sgInput.disabled = false;
+}
+
+async function deleteSuggestion(id) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/suggestions?id=eq.${id}`, {
+      method: 'DELETE',
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+    });
+    sgPinRow.classList.remove('show');
+    sgPin.value = '';
+    sgPendingDeleteId = null;
+    loadSuggestions();
+  } catch(e) { sgSetStatus('❌ Delete failed', '#ef4444'); }
+}
+
+function openSuggestions() { sgOverlay.classList.add('show'); loadSuggestions(); }
+function closeSuggestions() { sgOverlay.classList.remove('show'); sgPinRow.classList.remove('show'); sgPin.value=''; sgPendingDeleteId=null; }
+
+document.getElementById('sg-submit').addEventListener('click', submitSuggestion);
+sgInput.addEventListener('keydown', e => { if(e.key==='Enter') submitSuggestion(); });
+document.getElementById('sg-pin-confirm').addEventListener('click', () => {
+  if (sgPin.value === ADMIN_PIN && sgPendingDeleteId) deleteSuggestion(sgPendingDeleteId);
+  else { sgSetStatus('❌ Wrong PIN', '#ef4444'); sgPin.value=''; }
+});
+sgPin.addEventListener('keydown', e => { if(e.key==='Enter') document.getElementById('sg-pin-confirm').click(); });
+document.getElementById('sg-close').addEventListener('click', closeSuggestions);
+sgOverlay.addEventListener('click', e => { if(e.target===sgOverlay) closeSuggestions(); });
+
+// ── Leaderboard ───────────────────────────────────────────────
+const lbOverlay  = document.getElementById('lb-overlay');
+const lbBody     = document.getElementById('lb-body');
+const lbThead    = document.getElementById('lb-thead');
+const lbStatus   = document.getElementById('lb-status');
+const lbNameRow  = document.getElementById('lb-name-row');
+const lbNameInput= document.getElementById('lb-name');
+const lbSubmit   = document.getElementById('lb-submit');
+const lbSubtitle = document.getElementById('lb-subtitle');
+let pendingScore = null;
+let pendingTime  = null; // boss rush time in ms
+let activeTab    = 'timed';
+
+function fmtTime(ms) {
+  const s = Math.floor(ms/1000), m = Math.floor(s/60);
+  return m > 0 ? `${m}m ${s%60}s` : `${s}.${String(Math.floor((ms%1000)/10)).padStart(2,'0')}s`;
+}
+
+async function fetchScores() {
+  if (!SUPABASE_URL.startsWith('http')) { renderScores([],'demo'); return; }
+  try {
+    if (activeTab === 'timed') {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/scores?select=name,score,created_at&order=score.desc&limit=10`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+      );
+      const data = await res.json();
+      renderScores(Array.isArray(data) ? data : []);
+    } else {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/boss_rush_times?select=name,time_ms,created_at&order=time_ms.asc&limit=10`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+      );
+      const data = await res.json();
+      renderBossRushScores(Array.isArray(data) ? data : []);
+    }
+  } catch { renderScores([], 'error'); }
+}
+
+async function submitScore(name, score) {
+  if (!SUPABASE_URL.startsWith('http')) { lbStatus.textContent='⚠️ Set up Supabase to save scores.'; return; }
+  lbSubmit.disabled = true;
+  lbStatus.textContent = 'Submitting...';
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/scores`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ name: name.trim().slice(0,20), score })
+    });
+    if (!res.ok) { const t = await res.text(); lbStatus.textContent = '❌ Error: ' + t; lbSubmit.disabled = false; return; }
+    lbStatus.textContent = '✅ Score saved!';
+    lbNameRow.style.display = 'none';
+    await fetchScores();
+  } catch(e) { lbStatus.textContent = '❌ ' + e.message; lbSubmit.disabled = false; }
+}
+
+async function submitBossRushTime(name, time_ms) {
+  if (!SUPABASE_URL.startsWith('http')) { lbStatus.textContent='⚠️ Set up Supabase to save scores.'; return; }
+  lbSubmit.disabled = true;
+  lbStatus.textContent = 'Submitting...';
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/boss_rush_times`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ name: name.trim().slice(0,20), time_ms })
+    });
+    lbStatus.textContent = '✅ Time saved!';
+    lbNameRow.style.display = 'none';
+    await fetchScores();
+  } catch { lbStatus.textContent = '❌ Could not save time.'; lbSubmit.disabled = false; }
+}
+
+function escHtml(s) { return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderScores(rows, mode) {
+  lbThead.innerHTML = '<tr><th>#</th><th>Player</th><th>Score</th><th>Date</th></tr>';
+  const medals = ['🥇','🥈','🥉'];
+  if (mode === 'demo') { lbBody.innerHTML = `<tr><td colspan="4" style="color:#666;padding:16px;font-size:13px">Set up Supabase to see live scores.</td></tr>`; return; }
+  if (mode === 'error' || rows.length === 0) { lbBody.innerHTML = `<tr><td colspan="4" style="color:#555;padding:16px">No scores yet — be the first!</td></tr>`; return; }
+  lbBody.innerHTML = rows.map((r,i) => {
+    const date = new Date(r.created_at).toLocaleDateString();
+    const rank = medals[i] ? `<span class="rank-medal">${medals[i]}</span>` : `#${i+1}`;
+    return `<tr><td>${rank}</td><td>${escHtml(r.name)}</td><td>${r.score}</td><td>${date}</td></tr>`;
+  }).join('');
+}
+
+function renderBossRushScores(rows) {
+  lbThead.innerHTML = '<tr><th>#</th><th>Player</th><th>Time</th><th>Date</th></tr>';
+  const medals = ['🥇','🥈','🥉'];
+  if (rows.length === 0) { lbBody.innerHTML = `<tr><td colspan="4" style="color:#555;padding:16px">No runs yet — be the first!</td></tr>`; return; }
+  lbBody.innerHTML = rows.map((r,i) => {
+    const date = new Date(r.created_at).toLocaleDateString();
+    const rank = medals[i] ? `<span class="rank-medal">${medals[i]}</span>` : `#${i+1}`;
+    return `<tr><td>${rank}</td><td>${escHtml(r.name)}</td><td>${fmtTime(r.time_ms)}</td><td>${date}</td></tr>`;
+  }).join('');
+}
+
+function setTab(tab) {
+  activeTab = tab;
+  document.querySelectorAll('.lb-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  const isBossRush = tab === 'bossrush';
+  lbSubtitle.textContent = isBossRush ? 'Fastest Boss Rush clears' : 'Top scores — 60 second sprint';
+  // hide submit row when switching tabs (unless relevant pending)
+  const hasSubmit = isBossRush ? pendingTime !== null : pendingScore !== null;
+  if (!hasSubmit) lbNameRow.style.display = 'none';
+  else {
+    lbNameRow.style.display = 'flex';
+    lbSubtitle.textContent = isBossRush
+      ? `Your time: ${fmtTime(pendingTime)} — enter your name to save it!`
+      : `Your score: ${pendingScore} foods in 60s — enter your name to save it!`;
+  }
+  lbStatus.textContent = '';
+  fetchScores();
+}
+
+function openLeaderboard(withSubmit, score) {
+  pendingScore = withSubmit ? score : null;
+  pendingTime  = null;
+  lbStatus.textContent = '';
+  lbNameInput.value = '';
+  lbSubmit.disabled = false;
+  lbOverlay.classList.add('show');
+  setTab('timed');
+}
+
+function openBossRushLeaderboard(time_ms) {
+  pendingTime  = time_ms;
+  pendingScore = null;
+  lbStatus.textContent = '';
+  lbNameInput.value = '';
+  lbSubmit.disabled = false;
+  lbOverlay.classList.add('show');
+  setTab('bossrush');
+}
+
+document.querySelectorAll('.lb-tab').forEach(b => b.addEventListener('click', () => setTab(b.dataset.tab)));
+document.getElementById('lb-close').onclick = () => lbOverlay.classList.remove('show');
+lbOverlay.onclick = e => { if (e.target === lbOverlay) lbOverlay.classList.remove('show'); };
+lbSubmit.onclick = () => {
+  const name = lbNameInput.value.trim();
+  if (!name) { lbStatus.textContent = '⚠️ Enter a name first.'; return; }
+  if (activeTab === 'bossrush' && pendingTime !== null) submitBossRushTime(name, pendingTime);
+  else submitScore(name, pendingScore);
+};
+lbNameInput.addEventListener('keydown', e => { if (e.key==='Enter') lbSubmit.click(); });
+
+// ── Audio system ──────────────────────────────────────────────
+let _ac = null;
+function ac() {
+  if (!_ac) _ac = new (window.AudioContext||window.webkitAudioContext)();
+  if (_ac.state==='suspended') _ac.resume();
+  return _ac;
+}
+// activate on first interaction
+document.addEventListener('pointerdown', ()=>ac(), {once:true});
+document.addEventListener('keydown', ()=>ac(), {once:true});
+
+function sfx(freq, type, dur, vol, endFreq) {
+  try {
+    const a=ac(), osc=a.createOscillator(), g=a.createGain();
+    osc.connect(g); g.connect(a.destination);
+    osc.type=type||'sine';
+    osc.frequency.setValueAtTime(freq, a.currentTime);
+    if (endFreq) osc.frequency.exponentialRampToValueAtTime(endFreq, a.currentTime+dur);
+    g.gain.setValueAtTime(vol||0.22, a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, a.currentTime+dur);
+    osc.start(); osc.stop(a.currentTime+dur);
+  } catch(e){}
+}
+
+const playMunch   = ()=>sfx(400,'sine',0.09,0.18,200);
+const playPoison  = ()=>{ sfx(140,'sawtooth',0.22,0.28,70); sfx(90,'sawtooth',0.22,0.15,45); };
+const playOuch    = ()=>sfx(180,'sawtooth',0.16,0.32,85);
+const playGermEat = ()=>sfx(750,'sine',0.07,0.14,950);
+const playBossHit = ()=>sfx(260,'square',0.07,0.26,130);
+const playMedicine= ()=>{ sfx(440,'sine',0.1,0.2); setTimeout(()=>sfx(554,'sine',0.1,0.2),85); setTimeout(()=>sfx(659,'sine',0.18,0.22),170); };
+const playBossSpawn=()=>{ sfx(55,'sawtooth',0.55,0.35,30); setTimeout(()=>sfx(110,'square',0.4,0.28),280); };
+const playBossDefeat=()=>{ [392,494,587,784].forEach((f,i)=>setTimeout(()=>sfx(f,'sine',0.3,0.26),i*115)); };
+const playWin     = ()=>{ [523,659,784,1047,1318].forEach((f,i)=>setTimeout(()=>sfx(f,'triangle',0.35,0.28),i*110)); };
+
+// ── Background music ──────────────────────────────────────────
+const TRACKS = {
+  normal:   {seq:[261,0,329,0,392,329,0,261], bpm:108, wave:'triangle', vol:0.032},
+  pizza:    {seq:[220,246,220,196,220,246,262,246], bpm:168, wave:'square',   vol:0.038},
+  pizzalow: {seq:[220,246,220,196,175,196,220,196], bpm:200, wave:'square',   vol:0.042},
+  burger:   {seq:[98,0,98,0,131,0,110,0],    bpm:84,  wave:'sawtooth', vol:0.044},
+  burgerlow:{seq:[98,0,82,0,110,0,87,0],     bpm:100, wave:'sawtooth', vol:0.05},
+  bacteria: {seq:[174,185,174,155,164,174,155,185], bpm:128, wave:'sine', vol:0.034},
+  bacterialow:{seq:[155,164,155,138,147,155,138,164],bpm:155,wave:'sine',vol:0.04},
+  secret:   {seq:[523,659,784,659,523,440,494,523], bpm:138, wave:'triangle', vol:0.036},
+};
+let _musicTheme=null, _musicStep=0, _musicTimer=null;
+
+function setMusic(theme) {
+  if (_musicTheme===theme) return;
+  clearTimeout(_musicTimer); _musicTheme=theme; _musicStep=0;
+  if (theme) _tickMusic();
+}
+function stopMusic() { clearTimeout(_musicTimer); _musicTheme=null; }
+function _tickMusic() {
+  if (!_musicTheme) return;
+  const m=TRACKS[_musicTheme];
+  const freq=m.seq[_musicStep%m.seq.length]; _musicStep++;
+  if (freq>0) sfx(freq, m.wave, (60/m.bpm)*0.75, m.vol);
+  _musicTimer=setTimeout(_tickMusic, 60000/m.bpm);
+}
+
+// ── Player color customization ────────────────────────────────
+const SWATCHES=[
+  {l:'#a78bfa',d:'#4c1d95'}, // purple (default)
+  {l:'#f87171',d:'#7f1d1d'}, // red
+  {l:'#60a5fa',d:'#1e3a5f'}, // blue
+  {l:'#4ade80',d:'#14532d'}, // green
+  {l:'#fb923c',d:'#7c2d12'}, // orange
+  {l:'#e879f9',d:'#701a75'}, // magenta
+  {l:'#34d399',d:'#064e3b'}, // teal
+  {l:'#fbbf24',d:'#78350f'}, // gold
+  {l:'#f472b6',d:'#831843'}, // pink
+  {l:'#94a3b8',d:'#1e293b'}, // silver
+];
+let selectedSwatch = 0; // index into SWATCHES
+
+// ── Cosmetics ─────────────────────────────────────────────────
+const COSMETIC_SHAPES = [
+  { id:'circle', name:'Blob',   icon:'🟣', desc:'The classic blob',         req: null },
+  { id:'star',   name:'Star',   icon:'⭐', desc:'Unlock: Speed Demon',       req:'speed_25' },
+  { id:'spiky',  name:'Spiky',  icon:'🦔', desc:'Unlock: Pizza Slayer',      req:'pizza_slayer' },
+  { id:'boxy',   name:'Boxy',   icon:'🟦', desc:'Unlock: True Colors',       req:'colorful' },
+  { id:'crown',  name:'Crown',  icon:'👑', desc:'Unlock: Boss Rush Champion', req:'boss_rush_win' },
+];
+const COSMETIC_TRAILS = [
+  { id:'none',    name:'None',     icon:'✖️', desc:'Clean and simple',        req: null },
+  { id:'sparkle', name:'Sparkle',  icon:'✨', desc:'Unlock: Double Trouble',  req:'double_10' },
+  { id:'fire',    name:'Fire',     icon:'🔥', desc:'Unlock: Unstoppable',     req:'speed_40' },
+  { id:'hearts',  name:'Hearts',   icon:'💗', desc:'Unlock: Doctor\'s Orders', req:'doctor' },
+  { id:'rainbow', name:'Rainbow',  icon:'🌈', desc:'Unlock: Centurion',       req:'centurion' },
+];
+const COSMETIC_HATS = [
+  { id:'none',   name:'None',       icon:'✖️', desc:'No hat',              req: null },
+  { id:'monkey', name:'Monkey Hat', icon:'🐒', desc:'Unlock: Ice Cream Dream', req:'secret_clear' },
+];
+let equippedShape = 'circle';
+let equippedTrail = 'none';
+let equippedHat   = 'none';
+let cosmeticsTab  = 'shapes'; // 'shapes', 'trails', or 'hats'
+let trailParticles = [];
+
+const canvas = document.getElementById('canvas');
+const ctx    = canvas.getContext('2d');
+
+const isTouchDevice = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const W = canvas.width  = Math.min(window.innerWidth  - (isTouchDevice ? 0 : 20), 1200);
+const H = canvas.height = Math.min(window.innerHeight - (isTouchDevice ? 60 : 120), 700);
+
+// ── HUD ───────────────────────────────────────────────────────
+const scoreEl    = document.getElementById('score');
+const sizeEl     = document.getElementById('size');
+const timerEl    = document.getElementById('timer');
+const timerStat  = document.getElementById('timer-stat');
+const bossBarWrap= document.getElementById('boss-bar-wrap');
+const bossLabel  = document.getElementById('boss-label');
+const bossFill   = document.getElementById('boss-fill');
+
+// ── Mode / State ──────────────────────────────────────────────
+let gameMode  = null;
+let gameState = 'menu'; // menu | playing | gameover
+
+let pt2Unlocked = false; // unlocked after completing endless mode ending
+
+// ── Achievements ──────────────────────────────────────────────
+const ACHIEVEMENTS = [
+  { id:'first_bite',    icon:'🍕', name:'First Bite',       desc:'Eat your first piece of food' },
+  { id:'pizza_slayer',  icon:'🔥', name:'Pizza Slayer',     desc:'Defeat the Pizza Boss' },
+  { id:'burger_buster', icon:'💥', name:'Burger Buster',    desc:'Defeat the Burger Boss' },
+  { id:'germ_warrior',  icon:'🧬', name:'Germ Warrior',     desc:'Defeat the Bacteria Boss' },
+  { id:'true_ending',   icon:'🌌', name:'True Ending',      desc:'Watch the full ending cutscene' },
+  { id:'big_eater',     icon:'🐋', name:'Big Eater',        desc:'Reach 15× size' },
+  { id:'speed_25',      icon:'⚡', name:'Speed Demon',      desc:'Score 25+ in timed mode' },
+  { id:'speed_40',      icon:'🚀', name:'Unstoppable',      desc:'Score 40+ in timed mode' },
+  { id:'germ_gobbler',  icon:'✅', name:'Germ Gobbler',     desc:'Eat 10 germs in one run' },
+  { id:'doctor',        icon:'💊', name:'Doctor\'s Orders', desc:'Collect 5 medicines in one run' },
+  { id:'passive_ending',icon:'😴', name:'Passive Ending',    desc:'Finish timed mode without eating a single food' },
+  { id:'konami',        icon:'🕹️', name:'Konami Master',    desc:'Enter the Konami code' },
+  { id:'colorful',      icon:'🎨', name:'True Colors',      desc:'Try all 10 blob colors' },
+  { id:'secret_clear',  icon:'🍦', name:'Ice Cream Dream',  desc:'Complete secret mode' },
+  { id:'boss_rush_win', icon:'👑', name:'Boss Rush Champion', desc:'Defeat all 3 bosses in Boss Rush mode' },
+  { id:'speedrunner',   icon:'⏱️', name:'Speedrunner',       desc:'Clear Boss Rush in under 90 seconds' },
+  { id:'centurion',     icon:'💯', name:'Centurion',         desc:'Eat 100 foods total (across all runs)' },
+  { id:'veteran',       icon:'🎖️', name:'Veteran',           desc:'Play 10 runs' },
+  { id:'speed_10',      icon:'⚡', name:'Speed Freak',        desc:'Collect the Speed Boost power-up 10 times' },
+  { id:'magnet_10',     icon:'🧲', name:'Attractive',         desc:'Collect the Magnet power-up 10 times' },
+  { id:'double_10',     icon:'✨', name:'Double Trouble',     desc:'Collect the Double Points power-up 10 times' },
+  { id:'pizza_planet',  icon:'🛸', name:'Pizza Planet',      desc:'Go green and defeat the Pizza Boss', secret:true },
+  { id:'ketchup_bath',  icon:'🍅', name:'Ketchup Bath',      desc:'Get sauced by the Burger Boss 3 times in one run and still beat him', secret:true },
+  { id:'code_red',      icon:'🔴', name:'Code Red',          desc:'Go red and reach 10× size', secret:true },
+];
+let unlockedAchievements = new Set();
+let triedSwatches = new Set();
+let achievementToasts = []; // {id, timer}
+// per-run counters
+let runGermsEaten = 0, runMedicinesCollected = 0, runPizzaDamaged = false, runDamaged = false;
+let runBurgerHits = 0;
+// lifetime counters
+let totalFoodsEaten = 0, totalRunsPlayed = 0;
+let totalPowerUpsCollected = { speed: 0, magnet: 0, double: 0 };
+
+function unlockAchievement(id) {
+  if (unlockedAchievements.has(id)) return;
+  unlockedAchievements.add(id);
+  saveProgress();
+  const a = ACHIEVEMENTS.find(a=>a.id===id);
+  if (a) achievementToasts.push({ a, timer: 280 });
+}
+
+// ── Save / Load progress ──────────────────────────────────────
+function saveProgress() {
+  localStorage.setItem('munchProgress', JSON.stringify({
+    pt2Unlocked, konamiUnlocked, selectedSwatch,
+    achievements: [...unlockedAchievements],
+    triedSwatches: [...triedSwatches],
+    totalFoodsEaten, totalRunsPlayed, totalPowerUpsCollected,
+    equippedShape, equippedTrail, equippedHat,
+  }));
+}
+function loadProgress() {
+  try {
+    const d = JSON.parse(localStorage.getItem('munchProgress') || '{}');
+    if (d.pt2Unlocked)    pt2Unlocked    = true;
+    if (d.konamiUnlocked) konamiUnlocked = true;
+    if (typeof d.selectedSwatch === 'number') selectedSwatch = d.selectedSwatch;
+    if (Array.isArray(d.achievements)) d.achievements.forEach(id=>unlockedAchievements.add(id));
+    if (Array.isArray(d.triedSwatches)) d.triedSwatches.forEach(i=>triedSwatches.add(i));
+    if (typeof d.totalFoodsEaten === 'number') totalFoodsEaten = d.totalFoodsEaten;
+    if (typeof d.totalRunsPlayed === 'number') totalRunsPlayed = d.totalRunsPlayed;
+    if (d.totalPowerUpsCollected) Object.assign(totalPowerUpsCollected, d.totalPowerUpsCollected);
+    if (d.equippedShape) equippedShape = d.equippedShape;
+    if (d.equippedTrail) equippedTrail = d.equippedTrail;
+    if (d.equippedHat)   equippedHat   = d.equippedHat;
+  } catch(e) {}
+}
+// ── Konami code ───────────────────────────────────────────────
+const KONAMI = ['ArrowUp','ArrowUp','ArrowDown','ArrowDown','ArrowLeft','ArrowRight','ArrowLeft','ArrowRight','b','a'];
+let konamiProgress = 0;
+let konamiUnlocked = false;
+let konamiFlash = 0; // frames to flash the secret button
+
+loadProgress(); // must run after all variables declared above
+
+// ── Game variables ────────────────────────────────────────────
+let score = 0, timeLeft = 60;
+let bossRushStartTime = 0; // Date.now() when boss rush begins
+let countdownInterval = null;
+
+const FOODS = ['🍕','🍔','🍩','🌮','🍣','🍦','🍟','🧁','🍓','🍜','🌯','🥐','🧆','🥨','🍰','🥞'];
+const BLOB_COLORS = ['#ff6b6b','#4ecdc4','#45b7d1','#ffd93d','#ff9f43','#a29bfe','#fd79a8','#00cec9','#e17055','#6c5ce7'];
+
+let foods        = [];
+let particles    = [];
+let floatTexts   = [];
+let pepperoni    = []; // pizza boss bullets
+let mouths       = []; // player projectiles vs burger boss
+let ketchupSplats= []; // burger boss hazard puddles
+let blobs        = []; // secret mode targets
+
+// ── Boss state ────────────────────────────────────────────────
+const PIZZA_BOSS_SIZE     = 5.0;
+const BURGER_BOSS_SIZE    = 10.0;
+const PURPLE_BOSS_SIZE    = 10.0;
+const BACTERIA_BOSS_SIZE  = 15.0;
+const PIZZA_BOSS_HP       = 20;
+const BURGER_BOSS_HP      = 30;
+const PURPLE_BOSS_HP      = 25;
+const BACTERIA_BOSS_HP    = 40;
+const PIZZA_BOSS_R        = 48;
+const BURGER_BOSS_R       = 56;
+const PURPLE_BOSS_R       = 52;
+const BACTERIA_BOSS_R     = 54;
+const MEDICINE_DURATION   = 600; // 10 seconds at 60fps
+
+// ── Power-ups ─────────────────────────────────────────────────
+let powerUps = [];
+let powerUpSpawnTimer = 0;
+const POWERUP_TYPES = [
+  { id:'speed',  emoji:'⚡', label:'Speed Boost!',   color:'#ffd93d', duration:360 },
+  { id:'magnet', emoji:'🧲', label:'Magnet!',         color:'#a29bfe', duration:300 },
+  { id:'double', emoji:'✨', label:'Double Points!',  color:'#fd79a8', duration:360 },
+];
+// active power-up timers
+let activePowerUps = {}; // { speed: framesLeft, magnet: framesLeft, double: framesLeft }
+
+function spawnPowerUp() {
+  const margin = 60;
+  const x = margin + Math.random() * (W - margin*2);
+  const y = margin + Math.random() * (H - margin*2);
+  const type = POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)];
+  powerUps.push({ x, y, type, bob: Math.random()*Math.PI*2, scale: 0, collected: false });
+}
+
+function collectPowerUp(p) {
+  p.collected = true;
+  activePowerUps[p.type.id] = p.type.duration;
+  burst(p.x, p.y, p.type.emoji);
+  floatText(p.x, p.y - 30, p.type.label);
+  if (p.type.id === 'speed') player.speed = 6.0;
+  totalPowerUpsCollected[p.type.id] = (totalPowerUpsCollected[p.type.id] || 0) + 1;
+  if (totalPowerUpsCollected.speed  >= 10) unlockAchievement('speed_10');
+  if (totalPowerUpsCollected.magnet >= 10) unlockAchievement('magnet_10');
+  if (totalPowerUpsCollected.double >= 10) unlockAchievement('double_10');
+  saveProgress();
+}
+
+function tickPowerUps() {
+  for (const id in activePowerUps) {
+    activePowerUps[id]--;
+    if (activePowerUps[id] <= 0) {
+      delete activePowerUps[id];
+      if (id === 'speed') player.speed = 3.8;
+    }
+  }
+}
+
+function drawPowerUps() {
+  powerUps.forEach(p => {
+    if (p.collected) return;
+    p.bob += 0.05; p.scale = Math.min(1, p.scale + 0.07);
+    const pulse = 1 + Math.sin(Date.now() * 0.006) * 0.12;
+    ctx.save();
+    ctx.translate(p.x, p.y + Math.sin(p.bob)*5);
+    ctx.scale(p.scale * pulse, p.scale * pulse);
+    // glowing ring
+    ctx.shadowColor = p.type.color; ctx.shadowBlur = mobileMode ? 0 : 18;
+    ctx.strokeStyle = p.type.color; ctx.lineWidth = 2.5;
+    ctx.globalAlpha = 0.7 + Math.sin(Date.now()*0.008)*0.3;
+    ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI*2); ctx.stroke();
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = p.type.color;
+    ctx.beginPath(); ctx.arc(0, 0, 24, 0, Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur = 0;
+    ctx.font = '28px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(p.type.emoji, 0, 0);
+    ctx.restore();
+  });
+}
+
+function drawActivePowerUpHUD() {
+  let xi = 0;
+  for (const id in activePowerUps) {
+    const type = POWERUP_TYPES.find(t => t.id === id);
+    if (!type) continue;
+    const framesLeft = activePowerUps[id];
+    const frac = framesLeft / type.duration;
+    const bx = W/2 - 50 + xi * 60, by = H - 18;
+    ctx.save();
+    ctx.globalAlpha = 0.85;
+    ctx.fillStyle = '#111'; ctx.strokeStyle = type.color; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(bx - 24, by - 16, 48, 20, 6); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = type.color; ctx.globalAlpha = 0.5;
+    ctx.beginPath(); ctx.roundRect(bx - 24, by - 16, 48 * frac, 20, 6); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.font = '13px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(type.emoji, bx, by - 6);
+    ctx.restore();
+    xi++;
+  }
+}
+
+let pizzaBoss   = null;
+let burgerBoss  = null;
+let purpleBoss  = null;
+let bacteriaBoss = null;
+let pizzaDefeated    = false;
+let burgerSpawned    = false;
+let burgerDefeated   = false;
+let purpleBossSpawned = false;
+let bacteriaBossSpawned = false;
+
+let germs        = [];
+let medicines    = [];
+let medicineActive = false;
+let medicineTimer  = 0;
+let medicineSpawnTimer = 0;
+
+// ── Ending cutscene ───────────────────────────────────────────
+let endingCutscene = null;
+/*
+  phase 0 (0-360f): blob grows eating flying food
+  phase 1 (360-560f): vortex opens, blob sucked in
+  phase 2 (560-760f): new vast world reveal, blob looks tiny
+  phase 3 (760+): win screen
+*/
+let bacteriaBannerTimer = 0;
+
+// eating cutscene
+let eatCutscene = null;
+let fastSpawn      = false;
+let poisonPhase    = false;
+let poisonBannerTimer = 0;
+
+// ── Player ────────────────────────────────────────────────────
+const player = {
+  x: W/2, y: H/2,
+  baseRadius: 22,
+  growth: 0,
+  get radius() { return this.baseRadius + this.growth * 0.45; },
+  get sizeMultiplier() { return 1 + this.growth / 30; },
+  vx: 0, vy: 0, speed: 3.8,
+  angle: Math.PI/2,
+  wobble: 0,
+  invincible: 0,
+};
+
+const keys = {};
+
+// ── Mobile mode ───────────────────────────────────────────────
+let mobileMode = isTouchDevice;
+const JOY_R = 65, JOY_KNOB_R = 28;
+const SHOOT_BTN_R = 38;
+// Shoot button fixed at bottom-right
+function shootBtnX() { return W - SHOOT_BTN_R - 24; }
+function shootBtnY() { return H - SHOOT_BTN_R - 24; }
+
+// Joystick: dynamic — spawns where you touch on the LEFT half of screen
+const joystick = { active: false, touchId: null, baseX: 0, baseY: 0, dx: 0, dy: 0 };
+const shootBtn = { touchId: null };
+const achDrag = { touchId: null, startY: 0, startScroll: 0, moved: false };
+
+function drawMobileToggle() {
+  const on = mobileMode;
+  ctx.save();
+  ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = on ? '#10b981' : '#334155';
+  ctx.shadowColor = on ? '#10b981' : 'transparent'; ctx.shadowBlur = on ? 10 : 0;
+  ctx.beginPath(); ctx.roundRect(8, 8, 82, 30, 8); ctx.fill();
+  ctx.shadowBlur = 0; ctx.fillStyle = '#fff';
+  ctx.fillText(on ? '📱 Mobile ON' : '📱 Mobile', 49, 23);
+  ctx.restore();
+}
+
+function drawSuggestionsBtn() {
+  ctx.save();
+  ctx.fillStyle = '#7c3aed';
+  ctx.shadowColor = '#e879f9'; ctx.shadowBlur = 10;
+  ctx.beginPath(); ctx.roundRect(W - 90, 8, 82, 30, 8); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.font = 'bold 12px Segoe UI'; ctx.fillStyle = '#fff';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('💡 Ideas', W - 49, 23);
+  ctx.restore();
+}
+
+function drawJoystick() {
+  if (!mobileMode || gameState !== 'playing') return;
+
+  // Ghost outline at bottom-LEFT to show where to place thumb
+  if (!joystick.active) {
+    ctx.save();
+    ctx.globalAlpha = 0.18;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.setLineDash([6,4]);
+    ctx.beginPath(); ctx.arc(JOY_R + 24, H - JOY_R - 24, JOY_R, 0, Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.restore();
+  } else {
+    const bx = joystick.baseX, by = joystick.baseY;
+    const kx = bx + joystick.dx * JOY_R, ky = by + joystick.dy * JOY_R;
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+    ctx.fillStyle = 'rgba(255,255,255,0.12)';
+    ctx.beginPath(); ctx.arc(bx, by, JOY_R, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 0.8;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(kx, ky, JOY_KNOB_R, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // Shoot button (bottom-left, only during burger boss)
+  if (burgerBoss) {
+    const sx = shootBtnX(), sy = shootBtnY();
+    ctx.save();
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = '#ef4444';
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(sx, sy, SHOOT_BTN_R, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.font = `${SHOOT_BTN_R * 1.1}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('👄', sx, sy);
+    ctx.restore();
+  }
+}
+
+canvas.addEventListener('touchstart', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width, scaleY = H / rect.height;
+    const tx = (t.clientX - rect.left) * scaleX, ty = (t.clientY - rect.top) * scaleY;
+    // mobile toggle tap
+    if (tx > 8 && tx < 90 && ty > 8 && ty < 38) { mobileMode = !mobileMode; continue; }
+    if (!mobileMode) continue;
+    if (gameState === 'gameover' || gameState === 'win') {
+      gameState = 'menu'; stopMusic(); resetHint(); continue;
+    }
+    if (gameState === 'cutscene' && endingCutscene && endingCutscene.phase === 3) {
+      gameState = 'menu'; endingCutscene = null; stopMusic(); resetHint(); continue;
+    }
+    if (gameState === 'achievements') {
+      achDrag.touchId = t.identifier; achDrag.startY = ty; achDrag.startScroll = achScrollY; achDrag.moved = false;
+      continue;
+    }
+    if (gameState === 'cosmetics' || gameState === 'menu') {
+      canvas.dispatchEvent(new MouseEvent('click', { clientX: t.clientX, clientY: t.clientY }));
+      continue;
+    }
+    if (gameState === 'playing') {
+      // Shoot button (right side)
+      if (burgerBoss && shootBtn.touchId === null && tx > W / 2) {
+        const sx = shootBtnX(), sy = shootBtnY();
+        if (Math.hypot(tx - sx, ty - sy) < SHOOT_BTN_R + 20) {
+          shootBtn.touchId = t.identifier;
+          throwMouth(burgerBoss.x, burgerBoss.y);
+          continue;
+        }
+      }
+      // Joystick: LEFT half of screen
+      if (!joystick.active && tx < W / 2) {
+        joystick.active = true; joystick.touchId = t.identifier;
+        joystick.baseX = tx; joystick.baseY = ty;
+        joystick.dx = 0; joystick.dy = 0;
+      }
+    }
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  e.preventDefault();
+  if (!mobileMode) return;
+  for (const t of e.changedTouches) {
+    if (t.identifier === joystick.touchId) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = W / rect.width, scaleY = H / rect.height;
+      const tx = (t.clientX - rect.left) * scaleX, ty = (t.clientY - rect.top) * scaleY;
+      const dx = tx - joystick.baseX, dy = ty - joystick.baseY;
+      const len = Math.sqrt(dx*dx + dy*dy) || 1;
+      if (len > JOY_R) { joystick.dx = dx/len; joystick.dy = dy/len; }
+      else { joystick.dx = dx/JOY_R; joystick.dy = dy/JOY_R; }
+    }
+    if (t.identifier === achDrag.touchId) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleY = H / rect.height;
+      const ty = (t.clientY - rect.top) * scaleY;
+      const delta = achDrag.startY - ty;
+      if (Math.abs(delta) > 4) achDrag.moved = true;
+      achScrollY = Math.max(0, Math.min(achDrag.startScroll + delta, achMaxScroll));
+    }
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  e.preventDefault();
+  for (const t of e.changedTouches) {
+    if (t.identifier === joystick.touchId) {
+      joystick.active = false; joystick.touchId = null; joystick.dx = 0; joystick.dy = 0;
+    }
+    if (t.identifier === shootBtn.touchId) { shootBtn.touchId = null; }
+    if (t.identifier === achDrag.touchId) {
+      if (!achDrag.moved) {
+        canvas.dispatchEvent(new MouseEvent('click', { clientX: t.clientX, clientY: t.clientY }));
+      }
+      achDrag.touchId = null;
+    }
+  }
+}, { passive: false });
+
+window.addEventListener('keydown', e => {
+  keys[e.key] = true;
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  // Konami code — only track on menu
+  if (gameState === 'menu') {
+    const k = e.key.toLowerCase();
+    const expected = KONAMI[konamiProgress].toLowerCase();
+    if (k === expected) {
+      konamiProgress++;
+      if (konamiProgress === KONAMI.length) {
+        konamiUnlocked = true;
+        konamiFlash = 180;
+        konamiProgress = 0;
+        unlockAchievement('konami');
+        saveProgress();
+      }
+    } else {
+      konamiProgress = (k === KONAMI[0].toLowerCase()) ? 1 : 0;
+    }
+  }
+});
+window.addEventListener('keyup', e => keys[e.key] = false);
+
+// ── Food spawning ─────────────────────────────────────────────
+function safePosAwayFromPlayer(margin, minDist) {
+  let x, y, tries = 0;
+  do {
+    x = margin + Math.random() * (W - margin * 2);
+    y = margin + Math.random() * (H - margin * 2);
+    tries++;
+  } while (tries < 25 && Math.hypot(x - player.x, y - player.y) < minDist);
+  return [x, y];
+}
+
+function spawnFood() {
+  const margin = 70;
+  const [x, y] = safePosAwayFromPlayer(margin, player.radius + 80);
+  const poisoned = poisonPhase && player.sizeMultiplier < 15.0 && Math.random() < 0.05;
+  foods.push({
+    x, y,
+    emoji: FOODS[Math.floor(Math.random() * FOODS.length)],
+    size: 30 + Math.random() * 14,
+    bob: Math.random() * Math.PI * 2,
+    bobSpeed: 0.04 + Math.random() * 0.03,
+    scale: 0,
+    eaten: false,
+    poisoned,
+    life: 1,
+    decay: poisoned ? 0.00111 : (0.0004 + Math.random() * 0.0002), // poisoned ~15s, normal ~40-80s
+  });
+}
+
+let spawnTimer = 0;
+function getSpawnRate() { return fastSpawn ? 700 : 1800; }
+
+// ── Blob spawning (secret mode) ───────────────────────────────
+function spawnBlob() {
+  const margin = 60;
+  const [x, y] = safePosAwayFromPlayer(margin, player.radius + 100);
+  const color = BLOB_COLORS[Math.floor(Math.random() * BLOB_COLORS.length)];
+  const r = 14 + Math.random() * 10;
+  blobs.push({
+    x, y,
+    color,
+    r,
+    vx: (Math.random()-0.5)*1.5,
+    vy: (Math.random()-0.5)*1.5,
+    angle: Math.random()*Math.PI*2,
+    wobble: 0,
+    wanderTimer: 0,
+    scale: 0,
+    eaten: false,
+  });
+}
+
+// ── Eat food ──────────────────────────────────────────────────
+function eatFood(f) {
+  if (f.eaten) return;
+  f.eaten = true;
+
+  if (f.poisoned) {
+    playPoison();
+    damagePlayer(16);
+    burst(f.x, f.y, '☠️');
+    floatText(f.x, f.y - 24, '☠️ Poisoned!');
+    return;
+  }
+
+  playMunch();
+  const pts = activePowerUps['double'] ? 2 : 1;
+  score += pts;
+  player.growth = Math.min(player.growth + 4, 420); // 15x max
+  player.wobble = 0.4;
+  burst(f.x, f.y, f.emoji);
+  floatText(f.x, f.y - 24, (pts === 2 ? '+2 ✨' : '+1 ') + f.emoji);
+  updateSizeHUD();
+  unlockAchievement('first_bite');
+  if (player.sizeMultiplier >= 14.9) unlockAchievement('big_eater');
+
+  totalFoodsEaten++;
+  if (totalFoodsEaten >= 100) unlockAchievement('centurion');
+  if (totalFoodsEaten % 10 === 0) saveProgress();
+
+  if (player.sizeMultiplier >= 10.0 && selectedSwatch === 1) unlockAchievement('code_red');
+
+  // Boss triggers (endless only)
+  if (gameMode === 'endless') {
+    const sz = player.sizeMultiplier;
+    if (!pizzaBoss && !pizzaDefeated && sz >= PIZZA_BOSS_SIZE) spawnPizzaBoss();
+    if (!burgerBoss && !burgerSpawned && pizzaDefeated && sz >= BURGER_BOSS_SIZE) spawnBurgerBoss();
+    if (!bacteriaBoss && !bacteriaBossSpawned && burgerDefeated && sz >= BACTERIA_BOSS_SIZE) spawnBacteriaBoss();
+  }
+}
+
+function updateSizeHUD() {
+  const sz = player.sizeMultiplier.toFixed(1);
+  sizeEl.textContent = sz + 'x';
+  scoreEl.textContent = score;
+}
+
+// ── Pizza Boss ────────────────────────────────────────────────
+function spawnPizzaBoss() {
+  const [bx, by] = randomEdge(PIZZA_BOSS_R);
+  pizzaBoss = { x:bx, y:by, vx:0, vy:0, hp:PIZZA_BOSS_HP,
+    shootTimer:0, hitFlash:0, bob:0, phase:0, phaseTimer:0 };
+  showBossBar('🍕 PIZZA BOSS', '#ff4757', '#ff6b35');
+  floatText(W/2, H/2-80, '🍕 PIZZA BOSS APPEARS!');
+  burstBig(bx, by, '🍕', 14);
+  playBossSpawn(); setMusic('pizza');
+}
+
+function shootPepperoni() {
+  if (!pizzaBoss) return;
+  const angle = Math.atan2(player.y - pizzaBoss.y, player.x - pizzaBoss.x);
+  const shots = pizzaBoss.hp < PIZZA_BOSS_HP/2 ? 3 : 1;
+  for (let i=0; i<shots; i++) {
+    const spread = (i - (shots-1)/2) * 0.32;
+    const spd = 3.5 + (1 - pizzaBoss.hp/PIZZA_BOSS_HP)*2;
+    pepperoni.push({ x:pizzaBoss.x, y:pizzaBoss.y,
+      vx:Math.cos(angle+spread)*spd, vy:Math.sin(angle+spread)*spd,
+      radius:12, life:1 });
+  }
+}
+
+function damagePizzaBoss() {
+  if (!pizzaBoss || pizzaBoss.hitFlash > 0) return;
+  pizzaBoss.hp--;
+  pizzaBoss.hitFlash = 18;
+  floatText(pizzaBoss.x, pizzaBoss.y - 70, '💥 ' + pizzaBoss.hp + ' HP');
+  updateBossBar(pizzaBoss.hp / PIZZA_BOSS_HP);
+  playBossHit();
+  if (pizzaBoss.hp === Math.floor(PIZZA_BOSS_HP/2)) setMusic('pizzalow');
+  if (pizzaBoss.hp <= 0) defeatPizzaBoss();
+}
+
+function defeatPizzaBoss() {
+  burstBig(pizzaBoss.x, pizzaBoss.y, '🍕', 20);
+  floatText(pizzaBoss.x, pizzaBoss.y - 90, '🎉 PIZZA BOSS DOWN!');
+  score += 10; updateSizeHUD();
+  player.growth = Math.min(player.growth + 20, 420);
+  pizzaBoss = null; pepperoni = [];
+  pizzaDefeated = true;
+  fastSpawn = true;
+  hideBossBar();
+  playBossDefeat(); setMusic('normal');
+  unlockAchievement('pizza_slayer');
+  if (selectedSwatch === 3) unlockAchievement('pizza_planet');
+  if (gameMode === 'bossrush') { floatText(W/2, H/2-60, '🍔 Burger Boss incoming!'); setTimeout(()=>spawnBurgerBoss(), 2000); }
+}
+
+// ── Burger Boss ───────────────────────────────────────────────
+function spawnBurgerBoss() {
+  burgerSpawned = true;
+  const [bx, by] = randomEdge(BURGER_BOSS_R);
+  burgerBoss = { x:bx, y:by, vx:0, vy:0, hp:BURGER_BOSS_HP,
+    splatTimer:0, hitFlash:0, bob:0, phase:0, phaseTimer:0 };
+  showBossBar('🍔 BURGER BOSS', '#8B0000', '#d63031');
+  floatText(W/2, H/2-80, '🍔 BURGER BOSS APPEARS! Throw mouths!');
+  burstBig(bx, by, '🍔', 18);
+  playBossSpawn(); setMusic('burger');
+  const hintEl = document.getElementById('hint');
+  hintEl.textContent = 'WASD to move · Click anywhere to throw 👄 mouths at the burger boss!';
+}
+
+function splatKetchup(tx, ty) {
+  // keep splats away from player's current position
+  const ox = (Math.random()-0.5)*80, oy = (Math.random()-0.5)*80;
+  const sx = Math.max(20, Math.min(W-20, tx + ox));
+  const sy = Math.max(20, Math.min(H-20, ty + oy));
+  if (Math.hypot(sx - player.x, sy - player.y) < player.radius + 30) return;
+  ketchupSplats.push({
+    x: sx,
+    y: sy,
+    radius: 25 + Math.random()*20,
+    life: 1,
+    decay: 0.0008 + Math.random()*0.0004,
+    alpha: 0.82,
+  });
+  // extra small droplets
+  for (let i=0;i<4;i++) {
+    ketchupSplats.push({
+      x: tx + (Math.random()-0.5)*120,
+      y: ty + (Math.random()-0.5)*120,
+      radius: 8 + Math.random()*12,
+      life: 1,
+      decay: 0.001 + Math.random()*0.0005,
+      alpha: 0.65,
+    });
+  }
+}
+
+function throwMouth(tx, ty) {
+  if (mouths.length >= 8) return; // cap to prevent lag
+  const angle = Math.atan2(ty - player.y, tx - player.x);
+  const spd = 7;
+  mouths.push({ x:player.x, y:player.y,
+    vx:Math.cos(angle)*spd, vy:Math.sin(angle)*spd,
+    life:1, radius:14 });
+}
+
+function damageBurgerBoss() {
+  if (!burgerBoss || burgerBoss.hitFlash > 0) return;
+  burgerBoss.hp--;
+  burgerBoss.hitFlash = 18;
+  floatText(burgerBoss.x, burgerBoss.y - 80, '😱 ' + burgerBoss.hp + ' HP');
+  updateBossBar(burgerBoss.hp / BURGER_BOSS_HP);
+  playBossHit();
+  if (burgerBoss.hp === Math.floor(BURGER_BOSS_HP/2)) setMusic('burgerlow');
+  if (burgerBoss.hp <= 0) defeatBurgerBoss();
+}
+
+function defeatBurgerBoss() {
+  burstBig(burgerBoss.x, burgerBoss.y, '🍔', 24);
+  burstBig(burgerBoss.x - 40, burgerBoss.y + 30, '🍔', 14);
+  score += 25; updateSizeHUD();
+  burgerBoss = null; ketchupSplats = []; mouths = [];
+  hideBossBar();
+  burgerDefeated = true;
+  playBossDefeat(); setMusic('normal');
+  unlockAchievement('burger_buster');
+  if (runBurgerHits >= 3) unlockAchievement('ketchup_bath');
+  if (gameMode === 'bossrush') {
+    floatText(W/2, H/2-60, '🦠 Bacteria Boss incoming!');
+    setTimeout(()=>spawnBacteriaBoss(), 2000);
+  } else {
+    poisonPhase = true;
+    poisonBannerTimer = 300;
+    document.getElementById('hint').textContent = '☠️ Avoid green foods! Keep growing to 15×!';
+  }
+}
+
+// ── Bacteria Boss ─────────────────────────────────────────────
+function spawnBacteriaBoss() {
+  bacteriaBossSpawned = true;
+  const [bx, by] = randomEdge(BACTERIA_BOSS_R);
+  bacteriaBoss = { x:bx, y:by, vx:0, vy:0, hp:BACTERIA_BOSS_HP,
+    hitFlash:0, bob:0, shootTimer:0, phase:0, phaseTimer:0, immune:true };
+  showBossBar('🦠 BACTERIA BOSS — Source of Poison!', '#00b894', '#00cec9');
+  bacteriaBannerTimer = 280;
+  document.getElementById('hint').textContent = '💊 Drink medicine to make boss vulnerable · Eat germs before they infect food!';
+  spawnMedicine(); spawnMedicine(); // start with 2 medicines on the map
+  burstBig(bx, by, '🦠', 16);
+  playBossSpawn(); setMusic('bacteria');
+}
+
+function shootGerm() {
+  if (!bacteriaBoss) return;
+  const angle = Math.random() * Math.PI * 2;
+  const spd = 2.5 + Math.random() * 2;
+  germs.push({
+    x: bacteriaBoss.x, y: bacteriaBoss.y,
+    vx: Math.cos(angle)*spd, vy: Math.sin(angle)*spd,
+    r: 10 + Math.random()*6, life: 1,
+    bob: Math.random()*Math.PI*2, settled: false,
+  });
+}
+
+function spawnMedicine() {
+  const [x, y] = safePosAwayFromPlayer(80, player.radius + 60);
+  medicines.push({ x, y, bob: Math.random()*Math.PI*2, scale: 0 });
+}
+
+function damageBacteriaBoss() {
+  if (!bacteriaBoss || bacteriaBoss.immune || bacteriaBoss.hitFlash > 0) return;
+  bacteriaBoss.hp--;
+  bacteriaBoss.hitFlash = 18;
+  floatText(bacteriaBoss.x, bacteriaBoss.y - 75, '💥 ' + bacteriaBoss.hp + ' HP');
+  updateBossBar(bacteriaBoss.hp / BACTERIA_BOSS_HP);
+  playBossHit();
+  if (bacteriaBoss.hp === Math.floor(BACTERIA_BOSS_HP/2)) setMusic('bacterialow');
+  if (bacteriaBoss.hp <= 0) defeatBacteriaBoss();
+}
+
+function defeatBacteriaBoss() {
+  burstBig(bacteriaBoss.x, bacteriaBoss.y, '🦠', 24);
+  score += 30; updateSizeHUD();
+  bacteriaBoss = null; germs = []; medicines = [];
+  medicineActive = false; medicineTimer = 0;
+  poisonPhase = false;
+  hideBossBar();
+  playBossDefeat(); stopMusic();
+  unlockAchievement('germ_warrior');
+  foods.forEach(f => { if (f.poisoned) f.eaten = true; });
+  if (gameMode === 'bossrush') {
+    unlockAchievement('boss_rush_win');
+    playWin();
+    const elapsed = Date.now() - bossRushStartTime;
+    if (elapsed < 90000) unlockAchievement('speedrunner');
+    floatText(W/2, H/2-80, `👑 BOSS RUSH COMPLETE! ${fmtTime(elapsed)}`);
+    setTimeout(()=>{ gameState='win'; openBossRushLeaderboard(elapsed); }, 1200);
+  } else {
+    startEndingCutscene();
+  }
+}
+
+function startEndingCutscene() {
+  gameState = 'cutscene';
+  // pre-generate food particles that fly into the blob
+  const flyingFood = [];
+  for (let i = 0; i < 40; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const dist  = Math.min(W, H) * 0.45 + Math.random() * 120;
+    flyingFood.push({
+      x: W/2 + Math.cos(angle)*dist,
+      y: H/2 + Math.sin(angle)*dist,
+      emoji: FOODS[Math.floor(Math.random()*FOODS.length)],
+      delay: Math.floor(i * 6),   // staggered entry
+      size: 28 + Math.random()*16,
+    });
+  }
+  endingCutscene = {
+    timer: 0,
+    phase: 0,
+    blobScale: 0.08,   // starts tiny
+    blobAngle: 0,
+    vortexAngle: 0,
+    flyingFood,
+    starField: Array.from({length:120}, () => ({
+      x: Math.random()*W*6 - W*2.5,
+      y: Math.random()*H*6 - H*2.5,
+      r: 1 + Math.random()*3,
+      bright: Math.random(),
+    })),
+  };
+}
+
+function updateBacteriaBoss() {
+  const b = bacteriaBoss;
+  b.bob += 0.04; b.hitFlash = Math.max(0, b.hitFlash - 1);
+  b.shootTimer++; b.phaseTimer++;
+
+  // shoot germs periodically
+  const shootRate = b.hp < BACTERIA_BOSS_HP/2 ? 55 : 90;
+  if (b.shootTimer >= shootRate) { shootGerm(); if (b.hp < BACTERIA_BOSS_HP/2) shootGerm(); b.shootTimer = 0; }
+
+  // phase change
+  if (b.phaseTimer > 240) { b.phase = 1 - b.phase; b.phaseTimer = 0; }
+
+  const toBx = player.x - b.x, toBy = player.y - b.y;
+  const dist = Math.hypot(toBx, toBy) || 1;
+  const bspd = 1.0 + (1 - b.hp/BACTERIA_BOSS_HP)*0.7;
+
+  if (b.phase === 0) { b.vx += (toBx/dist)*0.12; b.vy += (toBy/dist)*0.12; }
+  else { b.vx += (-toBx/dist)*0.1; b.vy += (-toBy/dist)*0.1; }
+
+  const blen = Math.hypot(b.vx, b.vy) || 1;
+  if (blen > bspd) { b.vx=(b.vx/blen)*bspd; b.vy=(b.vy/blen)*bspd; }
+  b.x = Math.max(BACTERIA_BOSS_R, Math.min(W-BACTERIA_BOSS_R, b.x+b.vx));
+  b.y = Math.max(BACTERIA_BOSS_R, Math.min(H-BACTERIA_BOSS_R, b.y+b.vy));
+
+  // contact with player
+  if (dist < player.radius + BACTERIA_BOSS_R) {
+    if (!b.immune) damageBacteriaBoss();
+    else damagePlayer(10); // immune boss knocks you back
+  }
+
+  // medicine timer
+  if (medicineActive) {
+    medicineTimer--;
+    if (medicineTimer <= 0) { medicineActive = false; b.immune = true; floatText(W/2, 60, '🦠 Boss is IMMUNE again! Drink medicine!'); }
+  }
+
+  // spawn medicine periodically
+  medicineSpawnTimer++;
+  if (medicineSpawnTimer >= 900 && medicines.length < 2) { spawnMedicine(); medicineSpawnTimer = 0; }
+  if (medicineSpawnTimer >= 1800) medicineSpawnTimer = 0; // safety reset
+
+  if (bacteriaBannerTimer > 0) bacteriaBannerTimer--;
+}
+
+// ── Purple Boss (secret mode) ─────────────────────────────────
+function spawnPurpleBoss() {
+  purpleBossSpawned = true;
+  const [bx, by] = randomEdge(PURPLE_BOSS_R);
+  purpleBoss = { x:bx, y:by, vx:0, vy:0, hp:PURPLE_BOSS_HP,
+    hitFlash:0, bob:0, angle:0, phase:0, phaseTimer:0 };
+  showBossBar('💜 THE ORIGINAL — Final Boss!', '#6c63ff', '#a78bfa');
+  floatText(W/2, H/2-90, '💜 THE ORIGINAL APPEARS!');
+  burstBig(bx, by, '💜', 18);
+  document.getElementById('hint').textContent = '🍦 Ram into the purple blob to eat it!';
+}
+
+function damagePurpleBoss() {
+  if (!purpleBoss || purpleBoss.hitFlash > 0) return;
+  purpleBoss.hp--;
+  purpleBoss.hitFlash = 18;
+  floatText(purpleBoss.x, purpleBoss.y - 70, '💥 ' + purpleBoss.hp + ' HP');
+  updateBossBar(purpleBoss.hp / PURPLE_BOSS_HP);
+  if (purpleBoss.hp <= 0) startEatCutscene();
+}
+
+function startEatCutscene() {
+  eatCutscene = { timer: 180, blobX: purpleBoss.x, blobY: purpleBoss.y, scale: 1 };
+  purpleBoss = null;
+  hideBossBar();
+  blobs = [];
+  // freeze player controls via flag
+}
+
+function updatePurpleBoss() {
+  const b = purpleBoss;
+  b.bob += 0.05; b.hitFlash = Math.max(0, b.hitFlash - 1);
+  b.phaseTimer++;
+  if (b.phaseTimer > 200) { b.phase = 1 - b.phase; b.phaseTimer = 0; }
+
+  const toBx = player.x - b.x, toBy = player.y - b.y;
+  const dist = Math.hypot(toBx, toBy) || 1;
+  const bspd = 1.5 + (1 - b.hp/PURPLE_BOSS_HP)*1.2;
+
+  if (b.phase === 0) {
+    // chase
+    b.vx += (toBx/dist)*0.18; b.vy += (toBy/dist)*0.18;
+  } else {
+    // strafe
+    const perp = { x:-toBy/dist, y:toBx/dist };
+    b.vx += perp.x*0.22; b.vy += perp.y*0.22;
+  }
+  const blen = Math.hypot(b.vx, b.vy) || 1;
+  if (blen > bspd) { b.vx=(b.vx/blen)*bspd; b.vy=(b.vy/blen)*bspd; }
+  b.x = Math.max(PURPLE_BOSS_R, Math.min(W-PURPLE_BOSS_R, b.x+b.vx));
+  b.y = Math.max(PURPLE_BOSS_R, Math.min(H-PURPLE_BOSS_R, b.y+b.vy));
+  b.angle = Math.atan2(b.vy, b.vx);
+
+  // contact → damage boss
+  if (dist < player.radius + PURPLE_BOSS_R) damagePurpleBoss();
+}
+
+// ── Damage player ─────────────────────────────────────────────
+function damagePlayer(shrinkAmt) {
+  if (player.invincible > 0) return;
+  playOuch();
+  runDamaged = true;
+  if (pizzaBoss && !pizzaDefeated) runPizzaDamaged = true;
+  if (burgerBoss && !burgerDefeated) runBurgerHits++;
+  player.growth = Math.max(0, player.growth - (shrinkAmt||12));
+  player.invincible = 70;
+  player.wobble = 0.7;
+  updateSizeHUD();
+  floatText(player.x, player.y - 35, '💥 Ouch!');
+}
+
+// ── Boss bar helpers ──────────────────────────────────────────
+function showBossBar(labelText, c1, c2) {
+  bossLabel.textContent = labelText;
+  bossLabel.style.color = c1;
+  bossLabel.style.textShadow = '0 0 8px '+c1;
+  bossFill.style.background = `linear-gradient(90deg,${c1},${c2})`;
+  bossFill.style.boxShadow = '0 0 10px '+c1;
+  bossFill.style.width = '100%';
+  bossBarWrap.classList.add('visible');
+}
+function hideBossBar() { bossBarWrap.classList.remove('visible'); }
+function updateBossBar(frac) { bossFill.style.width = Math.max(0,frac*100)+'%'; }
+
+// ── Particle helpers ──────────────────────────────────────────
+function burst(x, y, emoji) {
+  const n = mobileMode ? 3 : 8;
+  for (let i=0;i<n;i++) {
+    const a=(Math.PI*2/n)*i+Math.random()*0.5, spd=2+Math.random()*3;
+    particles.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,life:1,emoji,size:14+Math.random()*10});
+  }
+}
+function burstBig(x, y, emoji, count) {
+  const n = mobileMode ? Math.min(count, 6) : count;
+  for (let i=0;i<n;i++) {
+    const a=(Math.PI*2/n)*i, spd=3+Math.random()*5;
+    particles.push({x,y,vx:Math.cos(a)*spd,vy:Math.sin(a)*spd,life:1,emoji,size:18+Math.random()*14});
+  }
+}
+function floatText(x, y, text) {
+  floatTexts.push({x, y, text, life:1, vy:-1.6});
+}
+function randomEdge(margin) {
+  const side = Math.floor(Math.random()*4);
+  if (side===0) return [Math.random()*W, margin];
+  if (side===1) return [W-margin, Math.random()*H];
+  if (side===2) return [Math.random()*W, H-margin];
+  return [margin, Math.random()*H];
+}
+
+// ── Timer ─────────────────────────────────────────────────────
+function startTimer() {
+  clearInterval(countdownInterval);
+  countdownInterval = setInterval(() => {
+    if (gameState!=='playing'||gameMode!=='timed') return;
+    timeLeft--;
+    timerEl.textContent = timeLeft;
+    if (timeLeft<=0) endGame();
+  }, 1000);
+}
+
+// ── Start / reset ─────────────────────────────────────────────
+function startGame(mode) {
+  gameMode=mode; gameState='playing';
+  score=0; timeLeft=60;
+  player.x=W/2; player.y=H/2;
+  player.growth=0; player.vx=0; player.vy=0;
+  player.invincible=0; player.wobble=0;
+  foods=[]; particles=[]; floatTexts=[]; pepperoni=[];
+  mouths=[]; ketchupSplats=[];
+  pizzaBoss=null; burgerBoss=null;
+  pizzaDefeated=false; burgerSpawned=false; fastSpawn=false;
+  poisonPhase=false; poisonBannerTimer=0;
+  blobs=[];
+  purpleBoss=null; purpleBossSpawned=false; eatCutscene=null;
+  bacteriaBoss=null; bacteriaBossSpawned=false;
+  germs=[]; medicines=[]; medicineActive=false; medicineTimer=0;
+  medicineSpawnTimer=0; bacteriaBannerTimer=0; burgerDefeated=false;
+  endingCutscene=null;
+  spawnTimer=0;
+  scoreEl.textContent='0'; sizeEl.textContent='1.0x';
+  timerEl.textContent='60'; hideBossBar();
+  timerStat.style.display = mode==='timed'?'':'none';
+  if (mode==='secret') {
+    player.baseRadius = 30;
+    document.getElementById('hint').textContent = '🍦 You ARE the food now! Eat the little blobs!';
+    for (let i=0;i<12;i++) spawnBlob();
+  } else if (mode==='bossrush') {
+    player.baseRadius = 22;
+    player.growth = 252; // ~10x starting size
+    document.getElementById('hint').textContent = '💪 Boss Rush! Defeat all 3 bosses back to back!';
+    pizzaDefeated = false; burgerSpawned = false; burgerDefeated = false;
+    bossRushStartTime = Date.now();
+    setTimeout(() => spawnPizzaBoss(), 800);
+  } else {
+    player.baseRadius = 22;
+    document.getElementById('hint').textContent='Move: WASD / Arrow Keys · Eat food to grow!';
+    for (let i=0;i<12;i++) spawnFood();
+  }
+  runGermsEaten=0; runMedicinesCollected=0; runPizzaDamaged=false; runDamaged=false;
+  runBurgerHits=0;
+  powerUps=[]; powerUpSpawnTimer=0; activePowerUps={}; player.speed=3.8;
+  totalRunsPlayed++;
+  if (totalRunsPlayed >= 10) unlockAchievement('veteran');
+  saveProgress();
+  if (mode==='timed') startTimer();
+  setMusic(mode==='secret' ? 'secret' : 'normal');
+}
+
+function resetHint() { document.getElementById('hint').textContent = 'Move: WASD / Arrow Keys · Eat food to grow!'; }
+
+function endGame() {
+  gameState='gameover';
+  clearInterval(countdownInterval);
+  stopMusic();
+  if (gameMode==='timed') {
+    if (score===0) unlockAchievement('passive_ending');
+    if (score>=25) unlockAchievement('speed_25');
+    if (score>=40) unlockAchievement('speed_40');
+    openLeaderboard(true, score);
+  }
+}
+
+// ── Click handler ─────────────────────────────────────────────
+canvas.addEventListener('wheel', e => {
+  if (gameState === 'achievements') {
+    e.preventDefault();
+    achScrollY = Math.max(0, Math.min(achScrollY + e.deltaY, achMaxScroll));
+  }
+}, { passive: false });
+
+canvas.addEventListener('click', e => {
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+
+  // Mobile toggle button (top-left, always clickable)
+  if (mx > 8 && mx < 90 && my > 8 && my < 38) { mobileMode = !mobileMode; return; }
+  // Suggestions button (top-right, always clickable)
+  if (mx > W - 90 && mx < W - 8 && my > 8 && my < 38) { openSuggestions(); return; }
+
+  if (gameState==='menu') {
+    const cx=W/2;
+    const timedX  = pt2Unlocked ? cx-215 : cx-145;
+    const endlessX = pt2Unlocked ? cx-65  : cx+15;
+    if (mx>timedX  &&mx<timedX+130  &&my>H/2-10&&my<H/2+52) startGame('timed');
+    if (mx>endlessX&&mx<endlessX+130&&my>H/2-10&&my<H/2+52) startGame('endless');
+    if (pt2Unlocked&&mx>cx+85&&mx<cx+215&&my>H/2-10&&my<H/2+52) { /* coming soon */ }
+    if (mx>W/2-75&&mx<W/2+75&&my>H/2+62&&my<H/2+110) { startGame('bossrush'); return; }
+    // Swatch color picker
+    { const swW=28,swGap=8,swTotal=SWATCHES.length,swStartX=W/2-(swTotal*(swW+swGap)-swGap)/2;
+      const sy=H/2+174;
+      for(let i=0;i<swTotal;i++){const sx=swStartX+i*(swW+swGap);if(mx>sx&&mx<sx+swW&&my>sy&&my<sy+swW){selectedSwatch=i;triedSwatches.add(i);if(triedSwatches.size>=10)unlockAchievement('colorful');saveProgress();return;}}
+    }
+    if (mx>W/2-195&&mx<W/2-77&&my>H/2+216&&my<H/2+254) { openLeaderboard(false); return; }
+    if (mx>W/2-59&&mx<W/2+59&&my>H/2+216&&my<H/2+254) { gameState='achievements'; achScrollY=0; return; }
+    if (mx>W/2+77&&mx<W/2+195&&my>H/2+216&&my<H/2+254) { gameState='cosmetics'; cosmeticsTab='shapes'; return; }
+    if (konamiUnlocked&&mx>cx-65&&mx<cx+65&&my>H/2+268&&my<H/2+318) startGame('secret');
+    return;
+  }
+  if (gameState==='achievements') { if(my>H-40&&my<H-10&&mx>W/2-60&&mx<W/2+60) { gameState='menu'; resetHint(); } return; }
+  if (gameState==='cosmetics') {
+    // Back button
+    if (my>H-42&&my<H-12&&mx>W/2-60&&mx<W/2+60) { gameState='menu'; resetHint(); return; }
+    // Tabs
+    const tabW=88, tabGap=4, tabStartX=W/2-(tabW*3+tabGap*2)/2;
+    if (my>82&&my<110) {
+      ['shapes','trails','hats'].forEach((t,i)=>{
+        const tx=tabStartX+i*(tabW+tabGap);
+        if (mx>tx&&mx<tx+tabW) cosmeticsTab=t;
+      });
+      return;
+    }
+    // Cards
+    const list = cosmeticsTab==='shapes' ? COSMETIC_SHAPES : cosmeticsTab==='trails' ? COSMETIC_TRAILS : COSMETIC_HATS;
+    const cols=3, cellW=(W-80)/cols, cellH=110, startY=126, padX=40;
+    list.forEach((c,i)=>{
+      const col=i%cols, row=Math.floor(i/cols);
+      const x=padX+col*cellW, y=startY+row*cellH;
+      if (mx>x&&mx<x+cellW-16&&my>y&&my<y+cellH-12) {
+        if (!c.req || unlockedAchievements.has(c.req)) {
+          if (cosmeticsTab==='shapes') equippedShape=c.id;
+          else if (cosmeticsTab==='trails') { equippedTrail=c.id; trailParticles=[]; }
+          else equippedHat=c.id;
+          saveProgress();
+        }
+      }
+    });
+    return;
+  }
+  if (gameState==='gameover'||gameState==='win') { gameState='menu'; stopMusic(); resetHint(); return; }
+  if (gameState==='cutscene' && endingCutscene && endingCutscene.phase===3) { gameState='menu'; endingCutscene=null; stopMusic(); resetHint(); return; }
+
+  // During burger boss: throw mouth
+  if (burgerBoss) {
+    throwMouth(mx, my);
+    return;
+  }
+
+  // Click food to eat
+  foods.forEach(f => {
+    if (f.eaten) return;
+    const dx=mx-f.x, dy=my-f.y;
+    if (Math.sqrt(dx*dx+dy*dy) < f.size*0.8) eatFood(f);
+  });
+});
+
+// ── Update ────────────────────────────────────────────────────
+let lastTime = 0;
+function update(ts) {
+  if (gameState==='cutscene') { updateEndingCutscene(); return; }
+  if (gameState!=='playing' && gameState!=='win') return;
+  if (gameState==='win') { particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.11;p.life-=0.03;}); particles=particles.filter(p=>p.life>0); floatTexts.forEach(t=>{t.y+=t.vy;t.life-=0.018;}); floatTexts=floatTexts.filter(t=>t.life>0); return; }
+  if (gameState!=='playing') return;
+  const dt = ts - lastTime; lastTime = ts;
+
+  // Boss rush elapsed timer display
+  if (gameMode === 'bossrush') {
+    timerStat.style.display = '';
+    timerEl.textContent = fmtTime(Date.now() - bossRushStartTime);
+  }
+
+  // Spawn food on timer
+  spawnTimer += dt;
+  const rate = getSpawnRate();
+  if (gameMode === 'secret') {
+    if (spawnTimer >= 1400 && blobs.length < 20) { spawnBlob(); spawnTimer=0; }
+  } else {
+    if (spawnTimer >= rate && foods.length < 20) { spawnFood(); spawnTimer=0; }
+  }
+  if (poisonBannerTimer > 0) poisonBannerTimer--;
+  if (konamiFlash > 0) konamiFlash--;
+
+  // Power-up spawning (not in secret mode, one on field at a time)
+  if (gameMode !== 'secret') {
+    powerUpSpawnTimer += dt;
+    if (powerUpSpawnTimer > 12000 && powerUps.filter(p=>!p.collected).length === 0) {
+      spawnPowerUp(); powerUpSpawnTimer = 0;
+    }
+  }
+
+  // Power-up collision & magnet
+  powerUps.forEach(p => {
+    if (p.collected) return;
+    if (activePowerUps['magnet']) {
+      const dx = player.x - p.x, dy = player.y - p.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d < 180) { p.x += (dx/d)*4; p.y += (dy/d)*4; }
+    }
+    const dx = player.x - p.x, dy = player.y - p.y;
+    if (Math.hypot(dx, dy) < player.radius + 22) collectPowerUp(p);
+  });
+  powerUps = powerUps.filter(p => !p.collected);
+
+  // Magnet — pull foods toward player
+  if (activePowerUps['magnet']) {
+    foods.forEach(f => {
+      if (f.eaten) return;
+      const dx = player.x - f.x, dy = player.y - f.y;
+      const d = Math.hypot(dx, dy) || 1;
+      if (d < 200) { f.x += (dx/d)*3.5; f.y += (dy/d)*3.5; }
+    });
+  }
+
+  tickPowerUps();
+
+  // Player movement
+  let dx=0, dy=0;
+  if (keys['ArrowLeft']||keys['a']||keys['A']) dx-=1;
+  if (keys['ArrowRight']||keys['d']||keys['D']) dx+=1;
+  if (keys['ArrowUp']||keys['w']||keys['W']) dy-=1;
+  if (keys['ArrowDown']||keys['s']||keys['S']) dy+=1;
+  if (mobileMode && joystick.active) { dx += joystick.dx; dy += joystick.dy; }
+  if (dx||dy) {
+    const len=Math.sqrt(dx*dx+dy*dy);
+    player.vx=(dx/len)*player.speed;
+    player.vy=(dy/len)*player.speed;
+    player.angle=Math.atan2(dy,dx);
+  } else { player.vx*=0.84; player.vy*=0.84; }
+
+  player.x=Math.max(player.radius,Math.min(W-player.radius,player.x+player.vx));
+  player.y=Math.max(player.radius,Math.min(H-player.radius,player.y+player.vy));
+  player.wobble*=0.88;
+  if (player.invincible>0) player.invincible--;
+  updateTrail();
+
+  // Food collision & decay
+  foods.forEach(f=>{
+    if (f.eaten) return;
+    f.bob+=f.bobSpeed; f.scale=Math.min(1,f.scale+0.07);
+    f.life=Math.max(0,f.life-f.decay);
+    if (f.life<=0) { f.eaten=true; return; }
+    const dx=player.x-f.x,dy=player.y-f.y;
+    if (Math.sqrt(dx*dx+dy*dy)<player.radius+f.size*0.52) eatFood(f);
+  });
+  foods=foods.filter(f=>!f.eaten);
+
+  // Blobs (secret mode)
+  if (gameMode === 'secret') {
+    blobs.forEach(b => {
+      if (b.eaten) return;
+      b.scale = Math.min(1, b.scale + 0.06);
+      b.wobble *= 0.9;
+      b.wanderTimer++;
+
+      const toBx = player.x - b.x, toBy = player.y - b.y;
+      const dist = Math.hypot(toBx, toBy) || 1;
+
+      if (dist < player.radius + 120) {
+        // flee!
+        const spd = 2.2 + (player.radius / 80);
+        b.vx += (-toBx/dist) * 0.35;
+        b.vy += (-toBy/dist) * 0.35;
+        b.angle = Math.atan2(-toBy, -toBx);
+      } else {
+        // wander
+        if (b.wanderTimer % 80 === 0) {
+          const a = Math.random()*Math.PI*2;
+          b.vx = Math.cos(a)*0.6; b.vy = Math.sin(a)*0.6;
+          b.angle = a;
+        }
+      }
+      const spd = Math.hypot(b.vx, b.vy);
+      if (spd > 1.8) { b.vx=(b.vx/spd)*1.8; b.vy=(b.vy/spd)*1.8; }
+      b.x = Math.max(b.r, Math.min(W-b.r, b.x+b.vx));
+      b.y = Math.max(b.r, Math.min(H-b.r, b.y+b.vy));
+      b.vx *= 0.96; b.vy *= 0.96;
+
+      // eaten by player
+      if (dist < player.radius + b.r * 0.8) {
+        b.eaten = true;
+        score++;
+        player.growth = Math.min(player.growth + 5, 420);
+        player.wobble = 0.5;
+        burst(b.x, b.y, '✨');
+        floatText(b.x, b.y - 20, '+1 😋');
+        updateSizeHUD();
+        // trigger purple boss at 15x
+        if (!purpleBossSpawned && player.sizeMultiplier >= PURPLE_BOSS_SIZE) spawnPurpleBoss();
+      }
+    });
+    blobs = blobs.filter(b => !b.eaten);
+  }
+
+  // Purple boss (secret mode)
+  if (purpleBoss) updatePurpleBoss();
+
+  // Eating cutscene (secret mode)
+  if (eatCutscene) {
+    eatCutscene.timer--;
+    eatCutscene.scale = Math.max(0, eatCutscene.timer / 90);
+    // move player toward blob position
+    const dx2 = eatCutscene.blobX - player.x, dy2 = eatCutscene.blobY - player.y;
+    const d2 = Math.hypot(dx2, dy2) || 1;
+    if (d2 > 4) { player.x += (dx2/d2)*5; player.y += (dy2/d2)*5; }
+    player.angle = Math.atan2(dy2, dx2);
+    if (eatCutscene.timer === 120) { player.wobble = 1.2; burstBig(eatCutscene.blobX, eatCutscene.blobY, '💜', 20); floatText(player.x, player.y-60, '😋 NOM!'); }
+    if (eatCutscene.timer <= 0) { eatCutscene = null; gameState = 'win'; playWin(); if(gameMode==='secret') unlockAchievement('secret_clear'); }
+    return; // freeze all other updates during cutscene
+  }
+
+  // Ketchup splats — damage player
+  ketchupSplats.forEach(k=>{
+    k.life=Math.max(0,k.life-k.decay);
+    if (k.life<=0) return;
+    const dx=player.x-k.x,dy=player.y-k.y;
+    if (Math.sqrt(dx*dx+dy*dy)<player.radius+k.radius*0.6) damagePlayer(6);
+  });
+  ketchupSplats=ketchupSplats.filter(k=>k.life>0);
+
+  // Germs — bounce, infect food, player collects
+  germs.forEach(g => {
+    g.bob += 0.06;
+    if (!g.settled) {
+      g.x += g.vx; g.y += g.vy;
+      g.vx *= 0.97; g.vy *= 0.97;
+      if (g.x - g.r < 0)  { g.x = g.r;   g.vx = Math.abs(g.vx); }
+      if (g.x + g.r > W)  { g.x = W-g.r; g.vx = -Math.abs(g.vx); }
+      if (g.y - g.r < 0)  { g.y = g.r;   g.vy = Math.abs(g.vy); }
+      if (g.y + g.r > H)  { g.y = H-g.r; g.vy = -Math.abs(g.vy); }
+      if (Math.hypot(g.vx, g.vy) < 0.3) g.settled = true;
+    }
+    // infect nearby food
+    foods.forEach(f => {
+      if (!f.poisoned && !f.eaten && Math.hypot(f.x-g.x, f.y-g.y) < g.r + f.size*0.5) {
+        f.poisoned = true; f.decay = 0.00111;
+        floatText(f.x, f.y-20, '☣️ Infected!');
+      }
+    });
+    // player eats germ
+    if (Math.hypot(player.x-g.x, player.y-g.y) < player.radius + g.r) {
+      g.life = 0; score++; updateSizeHUD();
+      playGermEat();
+      floatText(g.x, g.y-18, '✅ Germ eaten!');
+      burst(g.x, g.y, '✨');
+      runGermsEaten++;
+      if (runGermsEaten >= 10) unlockAchievement('germ_gobbler');
+    }
+  });
+  germs = germs.filter(g => g.life > 0);
+
+  // Medicines — player collects to unlock vulnerability
+  medicines.forEach(m => {
+    m.scale = Math.min(1, m.scale + 0.07); m.bob += 0.05;
+    if (Math.hypot(player.x-m.x, player.y-m.y) < player.radius + 20) {
+      m.collected = true;
+      medicineActive = true;
+      medicineTimer = MEDICINE_DURATION;
+      if (bacteriaBoss) bacteriaBoss.immune = false;
+      player.wobble = 0.5;
+      playMedicine();
+      runMedicinesCollected++;
+      if (runMedicinesCollected >= 5) unlockAchievement('doctor');
+      floatText(m.x, m.y-28, '💊 Boss VULNERABLE for 10s!');
+      burstBig(m.x, m.y, '💊', 8);
+    }
+  });
+  medicines = medicines.filter(m => !m.collected);
+
+  // Pizza boss update
+  if (pizzaBoss) updatePizzaBoss();
+
+  // Burger boss update
+  if (burgerBoss) updateBurgerBoss();
+
+  // Bacteria boss update
+  if (bacteriaBoss) updateBacteriaBoss();
+
+  // Pepperoni (pizza boss bullets)
+  pepperoni.forEach(p=>{
+    p.x+=p.vx; p.y+=p.vy;
+    if (p.x<0||p.x>W||p.y<0||p.y>H){p.life=0;return;}
+    const dx=player.x-p.x,dy=player.y-p.y;
+    if (Math.sqrt(dx*dx+dy*dy)<player.radius+p.radius){
+      damagePlayer(12); burst(p.x,p.y,'🔴'); p.life=0;
+    }
+  });
+  pepperoni=pepperoni.filter(p=>p.life>0);
+
+  // Mouth projectiles (vs burger boss)
+  mouths.forEach(m=>{
+    m.x+=m.vx; m.y+=m.vy;
+    if (m.x<-20||m.x>W+20||m.y<-20||m.y>H+20){m.life=0;return;}
+    if (burgerBoss) {
+      const dx=m.x-burgerBoss.x,dy=m.y-burgerBoss.y;
+      if (Math.sqrt(dx*dx+dy*dy)<BURGER_BOSS_R+m.radius){
+        damageBurgerBoss(); burst(m.x,m.y,'👄'); m.life=0;
+      }
+    }
+  });
+  mouths=mouths.filter(m=>m.life>0);
+
+  // Particles & float texts
+  particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.11;p.life-=0.038;});
+  particles=particles.filter(p=>p.life>0);
+  floatTexts.forEach(t=>{t.y+=t.vy;t.life-=0.018;});
+  floatTexts=floatTexts.filter(t=>t.life>0);
+}
+
+function updatePizzaBoss() {
+  const b = pizzaBoss;
+  b.bob+=0.05; b.hitFlash=Math.max(0,b.hitFlash-1);
+  b.shootTimer++; b.phaseTimer++;
+  const shootRate = b.hp<PIZZA_BOSS_HP/2?75:115;
+  if (b.shootTimer>=shootRate){shootPepperoni();b.shootTimer=0;}
+  if (b.phaseTimer>200){b.phase=1-b.phase;b.phaseTimer=0;}
+
+  const toBx=player.x-b.x, toBy=player.y-b.y;
+  const dist=Math.sqrt(toBx*toBx+toBy*toBy)||1;
+  const bspd=1.3+(1-b.hp/PIZZA_BOSS_HP)*0.9;
+
+  if (b.phase===0) {
+    if (dist>PIZZA_BOSS_R+player.radius+20){b.vx+=(toBx/dist)*0.16;b.vy+=(toBy/dist)*0.16;}
+  } else {
+    const perp={x:-toBy/dist,y:toBx/dist};
+    b.vx+=perp.x*0.22; b.vy+=perp.y*0.22;
+  }
+  const blen=Math.sqrt(b.vx*b.vx+b.vy*b.vy)||1;
+  if(blen>bspd){b.vx=(b.vx/blen)*bspd;b.vy=(b.vy/blen)*bspd;}
+  b.x=Math.max(PIZZA_BOSS_R,Math.min(W-PIZZA_BOSS_R,b.x+b.vx));
+  b.y=Math.max(PIZZA_BOSS_R,Math.min(H-PIZZA_BOSS_R,b.y+b.vy));
+
+  const dx=player.x-b.x,dy=player.y-b.y;
+  if(Math.sqrt(dx*dx+dy*dy)<player.radius+PIZZA_BOSS_R){
+    damagePizzaBoss(); damagePlayer(12);
+  }
+}
+
+function updateBurgerBoss() {
+  const b = burgerBoss;
+  b.bob+=0.04; b.hitFlash=Math.max(0,b.hitFlash-1);
+  b.splatTimer++; b.phaseTimer++;
+
+  // Splat ketchup periodically
+  const berserk = b.hp < BURGER_BOSS_HP/2;
+  const splatRate = berserk ? 70 : 120;
+  if (b.splatTimer>=splatRate) {
+    splatKetchup(player.x, player.y);
+    // random map splats — more in berserk
+    const extras = berserk ? 3 : 2;
+    for (let i=0;i<extras;i++) splatKetchup(Math.random()*W, Math.random()*H);
+    b.splatTimer=0;
+  }
+
+  if (b.phaseTimer>220){b.phase=1-b.phase;b.phaseTimer=0;}
+
+  const toBx=player.x-b.x,toBy=player.y-b.y;
+  const dist=Math.sqrt(toBx*toBx+toBy*toBy)||1;
+  const bspd=0.9+(1-b.hp/BURGER_BOSS_HP)*0.6;
+
+  if (b.phase===0){
+    b.vx+=(toBx/dist)*0.1; b.vy+=(toBy/dist)*0.1;
+  } else {
+    const perp={x:-toBy/dist,y:toBx/dist};
+    b.vx+=perp.x*0.15; b.vy+=perp.y*0.15;
+  }
+  const blen=Math.sqrt(b.vx*b.vx+b.vy*b.vy)||1;
+  if(blen>bspd){b.vx=(b.vx/blen)*bspd;b.vy=(b.vy/blen)*bspd;}
+  b.x=Math.max(BURGER_BOSS_R,Math.min(W-BURGER_BOSS_R,b.x+b.vx));
+  b.y=Math.max(BURGER_BOSS_R,Math.min(H-BURGER_BOSS_R,b.y+b.vy));
+
+  // contact damage
+  const dx=player.x-b.x,dy=player.y-b.y;
+  if(Math.sqrt(dx*dx+dy*dy)<player.radius+BURGER_BOSS_R) damagePlayer(14);
+}
+
+// ── Draw ──────────────────────────────────────────────────────
+function getBgTheme() {
+  if (gameMode==='secret') return 'secret';
+  if (bacteriaBoss) return 'bacteria';
+  if (burgerBoss)   return 'burger';
+  if (pizzaBoss)    return 'pizza';
+  if (burgerDefeated) return 'postburger';
+  if (pizzaDefeated)  return 'postpizza';
+  return 'normal';
+}
+
+function drawBg() {
+  const theme = (gameState==='playing'||gameState==='gameover') ? getBgTheme() : 'normal';
+  const t = Date.now()*0.001;
+
+  // Base gradient per theme
+  const gradients = {
+    normal:     ['#16213e','#0f3460'],
+    pizza:      ['#2d0a0a','#5c1a00'],
+    postpizza:  ['#1a1200','#2d2000'],
+    burger:     ['#1a0000','#3d0000'],
+    postburger: ['#001a0a','#002d12'],
+    bacteria:   ['#001a10','#00251a'],
+    secret:     ['#0d001a','#1a0033'],
+  };
+  const [c1,c2] = gradients[theme]||gradients.normal;
+  const grad=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,Math.max(W,H)*0.7);
+  grad.addColorStop(0,c1); grad.addColorStop(1,c2);
+  ctx.fillStyle=grad; ctx.fillRect(0,0,W,H);
+
+  // Watermark emojis per theme
+  const marks = {pizza:['🍕',8],burger:['🍔',8],bacteria:['🦠',10],secret:['⭐',12],postburger:['☠️',6]};
+  if (marks[theme]) {
+    const [emoji,count]=marks[theme];
+    ctx.save(); ctx.globalAlpha=0.055;
+    ctx.font='72px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    for(let i=0;i<count;i++){
+      ctx.save();
+      ctx.translate((i*317+120)%W, (i*211+90)%H);
+      ctx.rotate(i*0.72);
+      ctx.fillText(emoji,0,0);
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  // Bacteria bubbles
+  if (theme==='bacteria'||theme==='postburger') {
+    ctx.save();
+    for(let i=0;i<18;i++){
+      const bx=(i*83+40)%W;
+      const by=(((i*127+60) - t*28*(0.4+(i%3)*0.25))%H+H)%H;
+      const br=3+(i%5)*2.5;
+      ctx.strokeStyle=`rgba(0,255,120,${0.06+Math.sin(t+i)*0.03})`;
+      ctx.lineWidth=1.2; ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  // Burger ketchup border drips
+  if (theme==='burger') {
+    ctx.save();
+    for(let i=0;i<9;i++){
+      const dx=70+i*(W/9);
+      const dl=18+Math.sin(t*0.9+i*0.8)*10;
+      const dg=ctx.createLinearGradient(dx,0,dx,dl+24);
+      dg.addColorStop(0,'rgba(160,0,0,0.55)'); dg.addColorStop(1,'rgba(160,0,0,0)');
+      ctx.fillStyle=dg; ctx.beginPath(); ctx.ellipse(dx,dl/2,7,dl/2+12,0,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Grid
+  const gridCol = theme==='bacteria'?'rgba(0,255,120,0.04)': theme==='burger'?'rgba(255,0,0,0.04)': theme==='pizza'?'rgba(255,100,0,0.04)':'rgba(255,255,255,0.03)';
+  ctx.strokeStyle=gridCol; ctx.lineWidth=1;
+  for(let x=0;x<W;x+=55){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=55){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+}
+
+function drawKetchup() {
+  ketchupSplats.forEach(k=>{
+    ctx.save();
+    ctx.globalAlpha = k.alpha * k.life;
+    if (mobileMode) {
+      // simple flat circle on mobile — no gradient
+      ctx.fillStyle = 'rgba(160,0,0,0.7)';
+      ctx.beginPath(); ctx.arc(k.x,k.y,k.radius,0,Math.PI*2); ctx.fill();
+    } else {
+      const grad=ctx.createRadialGradient(k.x,k.y,0,k.x,k.y,k.radius);
+      grad.addColorStop(0,'rgba(180,0,0,0.95)');
+      grad.addColorStop(0.6,'rgba(140,0,0,0.8)');
+      grad.addColorStop(1,'rgba(80,0,0,0)');
+      ctx.fillStyle=grad;
+      ctx.beginPath(); ctx.arc(k.x,k.y,k.radius,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle='rgba(255,80,80,0.4)';
+      ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.arc(k.x,k.y,k.radius*0.6,0,Math.PI*2); ctx.stroke();
+    }
+    ctx.restore();
+  });
+}
+
+function drawFood(f) {
+  const bobY=Math.sin(f.bob)*4;
+  ctx.save();
+  ctx.translate(f.x,f.y+bobY);
+  ctx.scale(f.scale,f.scale);
+
+  // fade out when life < 0.25
+  ctx.globalAlpha = f.life < 0.25 ? f.life / 0.25 : 1;
+
+  if (f.poisoned) {
+    ctx.fillStyle = 'rgba(0,200,60,0.55)';
+    ctx.beginPath(); ctx.arc(0, 0, f.size * 0.62, 0, Math.PI*2); ctx.fill();
+    ctx.shadowColor='#00ff44'; ctx.shadowBlur = mobileMode ? 0 : 14;
+    if (!mobileMode) ctx.filter='hue-rotate(105deg) saturate(2.5) brightness(0.85)';
+    ctx.font=`${f.size}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(f.emoji,0,0);
+    ctx.filter='none'; ctx.shadowBlur=0;
+    ctx.font=`${f.size*0.48}px serif`;
+    ctx.fillText('☠️', f.size*0.38, -f.size*0.38);
+  } else {
+    ctx.fillStyle = 'rgba(255,230,100,0.55)';
+    ctx.beginPath(); ctx.arc(0, 0, f.size * 0.62, 0, Math.PI*2); ctx.fill();
+    ctx.shadowColor='rgba(255,220,50,0.8)'; ctx.shadowBlur = mobileMode ? 0 : 10;
+    ctx.font=`${f.size}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(f.emoji,0,0);
+    ctx.shadowBlur=0;
+  }
+  ctx.restore();
+}
+
+function drawBlobs() {
+  blobs.forEach(b => {
+    const r = b.r * b.scale;
+    ctx.save();
+    ctx.translate(b.x, b.y);
+    ctx.scale(b.scale, b.scale);
+
+    // shadow glow
+    ctx.shadowColor = b.color; ctx.shadowBlur = 14;
+
+    // body
+    const grad = ctx.createRadialGradient(-r*0.3,-r*0.3,0,0,0,r);
+    grad.addColorStop(0, b.color + 'ff');
+    grad.addColorStop(1, b.color + '88');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+
+    // panic eyes (look away from player = toward flee direction)
+    ctx.shadowBlur=0;
+    const ex=Math.cos(b.angle)*r*0.32, ey=Math.sin(b.angle)*r*0.32;
+    const esp=r*0.28;
+    const px=-Math.sin(b.angle)*esp, py=Math.cos(b.angle)*esp;
+    for(let s=-1;s<=1;s+=2){
+      const ex2=ex+px*s, ey2=ey+py*s;
+      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(ex2,ey2,r*0.2,0,Math.PI*2); ctx.fill();
+      // scared wide pupils
+      ctx.fillStyle='#111'; ctx.beginPath(); ctx.arc(ex2,ey2,r*0.12,0,Math.PI*2); ctx.fill();
+      // tiny white glint
+      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(ex2-r*0.06,ey2-r*0.06,r*0.05,0,Math.PI*2); ctx.fill();
+    }
+
+    // worried mouth (wavy line)
+    ctx.strokeStyle='#fff'; ctx.lineWidth=r*0.09; ctx.lineCap='round';
+    const mx2=Math.cos(b.angle)*r*0.5, my2=Math.sin(b.angle)*r*0.5;
+    ctx.beginPath();
+    ctx.arc(mx2,my2,r*0.2,b.angle+0.5,b.angle+Math.PI-0.5);
+    ctx.stroke();
+
+    ctx.restore();
+  });
+}
+
+function drawIceCreamPlayer() {
+  const r = player.radius;
+  const blink = player.invincible>0 && Math.floor(Date.now()/75)%2===0;
+  if (blink) return;
+  const wobbleX = 1+Math.sin(Date.now()*0.022)*player.wobble*0.12;
+  const wobbleY = 1-Math.sin(Date.now()*0.022)*player.wobble*0.12;
+
+  ctx.save();
+  ctx.translate(player.x, player.y);
+  ctx.scale(wobbleX, wobbleY);
+
+  // emoji
+  ctx.shadowColor='#ffe4f0'; ctx.shadowBlur=28;
+  ctx.font=`${r*2}px serif`;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🍦', 0, 0);
+
+  // smile overlaid on the scoop (upper portion of emoji)
+  ctx.shadowBlur=0;
+  const faceY = -r*0.45;
+  const faceR = r*0.55;
+  ctx.strokeStyle='#5c3317'; ctx.lineWidth=r*0.09; ctx.lineCap='round';
+  ctx.beginPath();
+  ctx.arc(0, faceY+faceR*0.18, faceR*0.35, 0.15, Math.PI-0.15);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawBacteriaBoss() {
+  if (!bacteriaBoss) return;
+  const b = bacteriaBoss;
+  const bobY = Math.sin(b.bob)*5;
+  const immune = b.immune;
+
+  ctx.save(); ctx.translate(b.x, b.y+bobY);
+
+  if (!mobileMode) {
+    // aura — green when immune, red when vulnerable
+    const auraCol = immune ? '0,200,100' : '255,60,60';
+    const pulse = 0.15+Math.sin(Date.now()*0.009)*0.1;
+    const aura = ctx.createRadialGradient(0,0,BACTERIA_BOSS_R*0.5,0,0,BACTERIA_BOSS_R*2.2);
+    aura.addColorStop(0,`rgba(${auraCol},${pulse})`);
+    aura.addColorStop(1,`rgba(${auraCol},0)`);
+    ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(0,0,BACTERIA_BOSS_R*2.2,0,Math.PI*2); ctx.fill();
+  } else {
+    // simple colored circle for mobile
+    ctx.fillStyle = immune ? 'rgba(0,200,100,0.25)' : 'rgba(255,60,60,0.25)';
+    ctx.beginPath(); ctx.arc(0,0,BACTERIA_BOSS_R*1.4,0,Math.PI*2); ctx.fill();
+  }
+
+  if (b.hitFlash>0 && !mobileMode) ctx.filter='brightness(4) saturate(0)';
+  ctx.shadowColor = immune ? '#00b894' : '#ff4757'; ctx.shadowBlur = mobileMode ? 0 : 30;
+  ctx.font=`${BACTERIA_BOSS_R*1.9}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🦠',0,0);
+  ctx.filter='none'; ctx.shadowBlur=0;
+
+  // IMMUNE / VULNERABLE label
+  ctx.font=`bold ${BACTERIA_BOSS_R*0.35}px Segoe UI`;
+  ctx.fillStyle = immune ? '#00ff99' : '#ff4757';
+  ctx.shadowBlur = mobileMode ? 0 : 10;
+  ctx.shadowColor = ctx.fillStyle;
+  const label = immune ? '🔒 IMMUNE' : '⚡ VULNERABLE!';
+  ctx.fillText(label, 0, BACTERIA_BOSS_R*1.1);
+  ctx.restore();
+}
+
+function drawGerms() {
+  germs.forEach(g => {
+    const bobY = Math.sin(g.bob)*3;
+    ctx.save(); ctx.translate(g.x, g.y+bobY);
+    ctx.shadowColor='#00b894'; ctx.shadowBlur=10;
+    ctx.font=`${g.r*2}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🦠',0,0);
+    ctx.restore();
+  });
+}
+
+function drawMedicines() {
+  medicines.forEach(m => {
+    const bobY = Math.sin(m.bob)*5;
+    ctx.save(); ctx.translate(m.x, m.y+bobY); ctx.scale(m.scale,m.scale);
+    // blue circle background so medicine is always visibly colored
+    ctx.fillStyle = 'rgba(116,185,255,0.6)';
+    ctx.beginPath(); ctx.arc(0,0,22,0,Math.PI*2); ctx.fill();
+    ctx.shadowColor='#74b9ff'; ctx.shadowBlur = mobileMode ? 0 : 12;
+    ctx.font='34px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('💊',0,0);
+    ctx.shadowBlur=0;
+    ctx.strokeStyle=`rgba(116,185,255,${0.4+Math.sin(Date.now()*0.008)*0.3})`;
+    ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0,24,0,Math.PI*2); ctx.stroke();
+    ctx.restore();
+  });
+}
+
+function drawMedicineTimer() {
+  if (!medicineActive || !bacteriaBoss) return;
+  const frac = medicineTimer / MEDICINE_DURATION;
+  const barW = 200, barH = 14;
+  const bx = W/2 - barW/2, by = H - 36;
+
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.beginPath(); ctx.roundRect(bx-2,by-2,barW+4,barH+4,6); ctx.fill();
+  const grad=ctx.createLinearGradient(bx,0,bx+barW,0);
+  grad.addColorStop(0,'#ff4757'); grad.addColorStop(1,'#ff6348');
+  ctx.fillStyle=grad; ctx.shadowColor='#ff4757'; ctx.shadowBlur=10;
+  ctx.beginPath(); ctx.roundRect(bx,by,barW*frac,barH,5); ctx.fill();
+
+  ctx.shadowBlur=0; ctx.fillStyle='#fff'; ctx.font='bold 13px Segoe UI';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(`⚡ VULNERABLE: ${Math.ceil(medicineTimer/60)}s`, W/2, by+barH/2);
+  ctx.restore();
+}
+
+function drawBacteriaBanner() {
+  if (bacteriaBannerTimer <= 0) return;
+  const flash = Math.floor(Date.now()/110)%2===0;
+  const alpha = Math.min(1, bacteriaBannerTimer/60);
+  ctx.save();
+  ctx.globalAlpha = alpha * (flash ? 1 : 0.55);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font=`bold ${Math.min(38,W*0.038)}px Segoe UI`;
+  ctx.fillStyle='#00ff99'; ctx.shadowColor='#00ff99'; ctx.shadowBlur=30;
+  ctx.fillText('☣️ BACTERIA BOSS SPAWNED — Source of the Poison Foods!', W/2, H/2-20);
+  ctx.shadowBlur=0; ctx.font='20px Segoe UI'; ctx.fillStyle='#fff'; ctx.globalAlpha=alpha*0.9;
+  ctx.fillText('💊 Drink medicine · Eat germs before they infect food!', W/2, H/2+28);
+  ctx.restore();
+}
+
+function drawPurpleBoss() {
+  if (!purpleBoss) return;
+  const b = purpleBoss;
+  const bobY = Math.sin(b.bob) * 6;
+  const r = PURPLE_BOSS_R;
+
+  ctx.save(); ctx.translate(b.x, b.y + bobY);
+
+  // purple aura
+  const pulse = 0.14 + Math.sin(Date.now()*0.007)*0.09;
+  const aura = ctx.createRadialGradient(0,0,r*0.5,0,0,r*2.2);
+  aura.addColorStop(0, `rgba(108,99,255,${pulse})`);
+  aura.addColorStop(1, 'rgba(108,99,255,0)');
+  ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(0,0,r*2.2,0,Math.PI*2); ctx.fill();
+
+  if (b.hitFlash > 0) ctx.filter='brightness(4) saturate(0)';
+  ctx.shadowColor='#6c63ff'; ctx.shadowBlur=28;
+
+  // body
+  const grad = ctx.createRadialGradient(-r*0.3,-r*0.3,0,0,0,r);
+  grad.addColorStop(0,'#a78bfa'); grad.addColorStop(1,'#4c1d95');
+  ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+  ctx.filter='none'; ctx.shadowBlur=0;
+
+  // eyes (angry — pointing inward)
+  const ex=Math.cos(b.angle)*r*0.34, ey=Math.sin(b.angle)*r*0.34;
+  const esp=r*0.27;
+  const px=-Math.sin(b.angle)*esp, py=Math.cos(b.angle)*esp;
+  for(let s=-1;s<=1;s+=2){
+    const ex2=ex+px*s, ey2=ey+py*s;
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(ex2,ey2,r*0.18,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#ff0000'; ctx.beginPath(); ctx.arc(ex2+Math.cos(b.angle)*r*0.06,ey2+Math.sin(b.angle)*r*0.06,r*0.1,0,Math.PI*2); ctx.fill();
+  }
+  // angry mouth
+  ctx.strokeStyle='#fff'; ctx.lineWidth=r*0.08; ctx.lineCap='round';
+  const mx2=Math.cos(b.angle)*r*0.46, my2=Math.sin(b.angle)*r*0.46;
+  ctx.beginPath();
+  ctx.arc(mx2, my2, r*0.24, b.angle+Math.PI+0.3, b.angle+Math.PI*2-0.3);
+  ctx.stroke();
+
+  // HP label
+  ctx.shadowBlur=0; ctx.fillStyle='#fff';
+  ctx.font=`bold ${r*0.38}px Segoe UI`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('😠', 0, -r*0.1);
+
+  ctx.restore();
+}
+
+function drawEatCutscene() {
+  if (!eatCutscene) return;
+  const sc = eatCutscene.scale;
+  if (sc <= 0) return;
+  ctx.save();
+  ctx.translate(eatCutscene.blobX, eatCutscene.blobY);
+  ctx.globalAlpha = sc;
+  ctx.shadowColor='#6c63ff'; ctx.shadowBlur=20;
+  const r = PURPLE_BOSS_R * sc;
+  const grad = ctx.createRadialGradient(-r*0.3,-r*0.3,0,0,0,r);
+  grad.addColorStop(0,'#a78bfa'); grad.addColorStop(1,'#4c1d95');
+  ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+function drawWinScreen() {
+  ctx.save();
+  const hue = Date.now()*0.1%360;
+
+  if (gameMode === 'bossrush') {
+    // Boss Rush win screen
+    ctx.fillStyle='rgba(10,5,5,0.88)'; ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+
+    ctx.font=`${Math.min(90,W*0.1)}px serif`;
+    ctx.fillText('💀', W/2, H/2-140);
+
+    ctx.font=`bold ${Math.min(56,W*0.062)}px Segoe UI`;
+    ctx.fillStyle='#ef4444';
+    ctx.shadowColor='#ef4444'; ctx.shadowBlur=40;
+    ctx.fillText('BOSS RUSH COMPLETE!', W/2, H/2-60);
+
+    ctx.shadowBlur=0;
+    ctx.font='bold 24px Segoe UI'; ctx.fillStyle='#fff';
+    ctx.fillText('🍕 🍔 🦠  All 3 bosses defeated!', W/2, H/2+10);
+
+    ctx.font='18px Segoe UI'; ctx.fillStyle='#aaa';
+    ctx.fillText(`Total score: ${score}`, W/2, H/2+52);
+
+    ctx.font='bold 17px Segoe UI';
+    ctx.fillStyle='#ef4444';
+    ctx.shadowColor='#ef4444'; ctx.shadowBlur=12;
+    ctx.fillText('Click to return to menu', W/2, H/2+108);
+  } else {
+    // Secret mode win screen
+    ctx.fillStyle=`hsla(${hue},60%,10%,0.82)`; ctx.fillRect(0,0,W,H);
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+
+    ctx.font=`${Math.min(90,W*0.1)}px serif`;
+    ctx.fillText('🏆', W/2, H/2-140);
+
+    ctx.font=`bold ${Math.min(60,W*0.065)}px Segoe UI`;
+    ctx.fillStyle=`hsl(${hue},100%,65%)`;
+    ctx.shadowColor=`hsl(${hue},100%,65%)`; ctx.shadowBlur=40;
+    ctx.fillText('YOU WIN?', W/2, H/2-55);
+
+    ctx.shadowBlur=0;
+    ctx.font='bold 26px Segoe UI'; ctx.fillStyle='#fff';
+    ctx.fillText('🍦 The Ice Cream reigns supreme! 🍦', W/2, H/2+10);
+
+    ctx.font='20px Segoe UI'; ctx.fillStyle='#aaa';
+    ctx.fillText(`Blobs eaten: ${score}`, W/2, H/2+56);
+
+    ctx.font='bold 17px Segoe UI';
+    ctx.fillStyle=`hsl(${hue},100%,70%)`;
+    ctx.shadowColor=`hsl(${hue},100%,70%)`; ctx.shadowBlur=12;
+    ctx.fillText('Click to return to menu', W/2, H/2+110);
+  }
+  ctx.restore();
+}
+
+function drawPoisonBanner() {
+  if (poisonBannerTimer <= 0) return;
+  const flash = Math.floor(Date.now() / 120) % 2 === 0;
+  const alpha = Math.min(1, poisonBannerTimer / 40);
+  ctx.save();
+  ctx.globalAlpha = alpha * (flash ? 1 : 0.6);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `bold ${Math.min(52, W * 0.05)}px Segoe UI`;
+  ctx.fillStyle = '#00ff44';
+  ctx.shadowColor = '#00ff44'; ctx.shadowBlur = 40;
+  ctx.fillText('☠️ POISONOUS FOODS NOW SPAWNING! ☠️', W/2, H/2);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+}
+
+function drawPlayerBody(r, wobbleX, wobbleY, sw) {
+  ctx.save(); ctx.scale(wobbleX, wobbleY);
+  const grad = ctx.createRadialGradient(-r*0.3,-r*0.3,0,0,0,r);
+  grad.addColorStop(0,sw.l); grad.addColorStop(1,sw.d);
+  ctx.fillStyle = grad;
+
+  if (equippedShape === 'star') {
+    ctx.beginPath();
+    for (let i=0;i<10;i++) {
+      const a = (i*Math.PI/5) - Math.PI/2;
+      const rad = i%2===0 ? r : r*0.48;
+      i===0 ? ctx.moveTo(Math.cos(a)*rad, Math.sin(a)*rad) : ctx.lineTo(Math.cos(a)*rad, Math.sin(a)*rad);
+    }
+    ctx.closePath(); ctx.fill();
+  } else if (equippedShape === 'spiky') {
+    ctx.beginPath();
+    const spikes = 8;
+    for (let i=0;i<spikes*2;i++) {
+      const a = (i*Math.PI/spikes) - Math.PI/2;
+      const rad = i%2===0 ? r : r*0.72;
+      i===0 ? ctx.moveTo(Math.cos(a)*rad, Math.sin(a)*rad) : ctx.lineTo(Math.cos(a)*rad, Math.sin(a)*rad);
+    }
+    ctx.closePath(); ctx.fill();
+  } else if (equippedShape === 'boxy') {
+    ctx.beginPath(); ctx.roundRect(-r,-r,r*2,r*2,r*0.35); ctx.fill();
+  } else if (equippedShape === 'crown') {
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+    // crown points on top
+    ctx.fillStyle = sw.l;
+    const cw = r*0.55, ch = r*0.5;
+    ctx.beginPath();
+    ctx.moveTo(-cw, -r*0.7);
+    ctx.lineTo(-cw, -r*1.22);
+    ctx.lineTo(-cw*0.3, -r*0.9);
+    ctx.lineTo(0, -r*1.32);
+    ctx.lineTo(cw*0.3, -r*0.9);
+    ctx.lineTo(cw, -r*1.22);
+    ctx.lineTo(cw, -r*0.7);
+    ctx.closePath(); ctx.fill();
+  } else {
+    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+const TRAIL_EMOJIS = { sparkle:'✨', fire:'🔥', hearts:'💗', rainbow:'🌈' };
+const TRAIL_COLORS = { sparkle:'#fd79a8', fire:'#ff6b35', hearts:'#ff4d6d', rainbow:null };
+let trailTimer = 0;
+
+function updateTrail() {
+  if (equippedTrail === 'none') { trailParticles=[]; return; }
+  const spd = Math.hypot(player.vx, player.vy);
+  if (spd > 0.5) {
+    trailTimer++;
+    if (trailTimer % (mobileMode ? 3 : 1) === 0) {
+      const colors = ['#ff6b6b','#ffd93d','#6bcb77','#4d96ff','#ff6fd8'];
+      trailParticles.push({
+        x: player.x + (Math.random()-0.5)*player.radius*0.6,
+        y: player.y + (Math.random()-0.5)*player.radius*0.6,
+        emoji: TRAIL_EMOJIS[equippedTrail],
+        color: equippedTrail==='rainbow' ? colors[Math.floor(Math.random()*colors.length)] : TRAIL_COLORS[equippedTrail],
+        size: player.radius * (0.4 + Math.random()*0.25),
+        life: 1, decay: 0.018+Math.random()*0.012,
+        vx:(Math.random()-0.5)*0.8, vy:-0.4-Math.random()*0.6,
+      });
+    }
+  }
+  trailParticles.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.life-=p.decay; });
+  trailParticles = trailParticles.filter(p=>p.life>0);
+}
+
+function drawTrailParticles() {
+  trailParticles.forEach(p=>{
+    ctx.save(); ctx.globalAlpha=p.life*0.8;
+    ctx.font=`${p.size*p.life+6}px serif`;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(p.emoji,p.x,p.y);
+    ctx.restore();
+  });
+}
+
+function drawPlayer() {
+  const r=player.radius;
+  const wb=player.wobble;
+  const wobbleX=1+Math.sin(Date.now()*0.022)*wb*0.15;
+  const wobbleY=1-Math.sin(Date.now()*0.022)*wb*0.15;
+  const blink=player.invincible>0&&Math.floor(Date.now()/75)%2===0;
+  if(blink) return;
+
+  const sw = SWATCHES[selectedSwatch];
+  ctx.save(); ctx.translate(player.x,player.y);
+  ctx.shadowColor=sw.l; ctx.shadowBlur=22;
+
+  drawPlayerBody(r, wobbleX, wobbleY, sw);
+
+  // Eyes
+  ctx.shadowBlur=0;
+  const ex=Math.cos(player.angle)*r*0.34, ey=Math.sin(player.angle)*r*0.34;
+  const esp=r*0.27;
+  const px=-Math.sin(player.angle)*esp, py=Math.cos(player.angle)*esp;
+  for(let s=-1;s<=1;s+=2){
+    const ex2=ex+px*s, ey2=ey+py*s;
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(ex2,ey2,r*0.17,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#222'; ctx.beginPath(); ctx.arc(ex2+Math.cos(player.angle)*r*0.05,ey2+Math.sin(player.angle)*r*0.05,r*0.085,0,Math.PI*2); ctx.fill();
+  }
+
+  // Hat
+  if (equippedHat === 'monkey') {
+    ctx.font = `${r * 1.1}px serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('🐒', 0, -r * 0.85);
+  }
+
+  // Mouth
+  ctx.strokeStyle='#fff'; ctx.lineWidth=r*0.075; ctx.lineCap='round';
+  const mx2=Math.cos(player.angle)*r*0.44, my2=Math.sin(player.angle)*r*0.44;
+  ctx.beginPath();
+  if(player.wobble>0.1){
+    ctx.arc(mx2,my2,r*0.23,player.angle-0.6,player.angle+0.6);
+    ctx.fillStyle='#ff6b6b'; ctx.fill();
+  } else {
+    ctx.arc(mx2,my2,r*0.23,player.angle-0.5,player.angle+0.5); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawCosmetics() {
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,10,30,0.96)';
+  ctx.fillRect(0,0,W,H);
+
+  ctx.font='bold 30px Segoe UI'; ctx.fillStyle='#e879f9';
+  ctx.shadowColor='#e879f9'; ctx.shadowBlur=18;
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('✨ Cosmetics', W/2, 48);
+  ctx.shadowBlur=0;
+
+  // Tabs
+  const tabW=88, tabH=28, tabGap=4, tabY=82;
+  const tabStartX = W/2 - (tabW*3+tabGap*2)/2;
+  const tabs = ['shapes','trails','hats'];
+  const tabLabels = ['Shapes','Trails','Hats'];
+  tabs.forEach((t,i) => {
+    const active = cosmeticsTab===t;
+    drawBtn(tabStartX+i*(tabW+tabGap), tabY, tabW, tabH, tabLabels[i],
+      active?'#7c3aed':'#334155', active?'#4c1d95':'#1e293b');
+  });
+
+  const list = cosmeticsTab==='shapes' ? COSMETIC_SHAPES : cosmeticsTab==='trails' ? COSMETIC_TRAILS : COSMETIC_HATS;
+  const equipped = cosmeticsTab==='shapes' ? equippedShape : cosmeticsTab==='trails' ? equippedTrail : equippedHat;
+  const cols=3, cellW=(W-80)/cols, cellH=110, startY=126, padX=40;
+
+  list.forEach((c,i)=>{
+    const col=i%cols, row=Math.floor(i/cols);
+    const x=padX+col*cellW, y=startY+row*cellH;
+    const unlocked = !c.req || unlockedAchievements.has(c.req);
+    const isEquipped = equipped===c.id;
+
+    ctx.save();
+    ctx.globalAlpha = unlocked ? 1 : 0.38;
+    ctx.fillStyle = isEquipped ? '#3b1d8a' : '#0f172a';
+    ctx.strokeStyle = isEquipped ? '#e879f9' : (unlocked ? '#4c1d95' : '#334155');
+    ctx.lineWidth = isEquipped ? 2.5 : 1;
+    ctx.beginPath(); ctx.roundRect(x,y,cellW-16,cellH-12,10); ctx.fill(); ctx.stroke();
+
+    ctx.font='36px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillStyle='#fff';
+    ctx.fillText(unlocked ? c.icon : '🔒', x+(cellW-16)/2, y+38);
+
+    ctx.font='bold 12px Segoe UI'; ctx.fillStyle=isEquipped?'#e879f9':(unlocked?'#fff':'#64748b');
+    ctx.fillText(c.name, x+(cellW-16)/2, y+68);
+
+    ctx.font='10px Segoe UI'; ctx.fillStyle='#64748b';
+    ctx.fillText(unlocked?(isEquipped?'Equipped':'Click to equip'):c.desc, x+(cellW-16)/2, y+84);
+    ctx.restore();
+  });
+
+  drawBtn(W/2-60,H-42,120,30,'← Back','#334155','#1e293b');
+  ctx.restore();
+}
+
+function drawPizzaBoss() {
+  if(!pizzaBoss) return;
+  const b=pizzaBoss;
+  const bobY=Math.sin(b.bob)*6;
+  ctx.save(); ctx.translate(b.x,b.y+bobY);
+
+  if (!mobileMode) {
+    const aAlpha=0.12+Math.sin(Date.now()*0.006)*0.08;
+    const aura=ctx.createRadialGradient(0,0,PIZZA_BOSS_R*0.5,0,0,PIZZA_BOSS_R*2);
+    aura.addColorStop(0,'rgba(255,71,87,'+aAlpha+')');
+    aura.addColorStop(1,'rgba(255,71,87,0)');
+    ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(0,0,PIZZA_BOSS_R*2,0,Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillStyle='rgba(255,71,87,0.25)';
+    ctx.beginPath(); ctx.arc(0,0,PIZZA_BOSS_R*1.4,0,Math.PI*2); ctx.fill();
+  }
+
+  if(b.hitFlash>0 && !mobileMode) ctx.filter='brightness(4) saturate(0)';
+  ctx.shadowBlur = mobileMode ? 0 : 28; ctx.shadowColor='#ff4757';
+  ctx.font=`${PIZZA_BOSS_R*1.9}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🍕',0,0);
+  ctx.filter='none'; ctx.shadowBlur=0;
+  ctx.font=`${PIZZA_BOSS_R*0.6}px serif`;
+  ctx.fillText('😤',0,-PIZZA_BOSS_R*0.15);
+  ctx.restore();
+}
+
+function drawBurgerBoss() {
+  if(!burgerBoss) return;
+  const b=burgerBoss;
+  const bobY=Math.sin(b.bob)*5;
+  ctx.save(); ctx.translate(b.x,b.y+bobY);
+
+  if (!mobileMode) {
+    const pulse=0.15+Math.sin(Date.now()*0.008)*0.1;
+    const aura=ctx.createRadialGradient(0,0,BURGER_BOSS_R*0.5,0,0,BURGER_BOSS_R*2.2);
+    aura.addColorStop(0,'rgba(139,0,0,'+pulse+')');
+    aura.addColorStop(1,'rgba(139,0,0,0)');
+    ctx.fillStyle=aura; ctx.beginPath(); ctx.arc(0,0,BURGER_BOSS_R*2.2,0,Math.PI*2); ctx.fill();
+  } else {
+    ctx.fillStyle='rgba(139,0,0,0.3)';
+    ctx.beginPath(); ctx.arc(0,0,BURGER_BOSS_R*1.4,0,Math.PI*2); ctx.fill();
+  }
+
+  if(b.hitFlash>0 && !mobileMode) ctx.filter='brightness(4) saturate(0)';
+  ctx.shadowBlur = mobileMode ? 0 : 34; ctx.shadowColor='#8B0000';
+  ctx.font=`${BURGER_BOSS_R*2}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('🍔',0,0);
+  ctx.filter='none'; ctx.shadowBlur=0;
+  ctx.font=`${BURGER_BOSS_R*0.65}px serif`;
+  ctx.fillText('😡',0,-BURGER_BOSS_R*0.2);
+  ctx.restore();
+}
+
+function drawPepperoni() {
+  pepperoni.forEach(p=>{
+    ctx.save(); ctx.translate(p.x,p.y);
+    ctx.shadowColor='#ff4757'; ctx.shadowBlur=8;
+    ctx.font='24px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('🔴',0,0); ctx.restore();
+  });
+}
+
+function drawMouths() {
+  mouths.forEach(m=>{
+    const angle=Math.atan2(m.vy,m.vx);
+    ctx.save(); ctx.translate(m.x,m.y); ctx.rotate(angle);
+    if (!mobileMode) { ctx.shadowColor='#ff69b4'; ctx.shadowBlur=10; }
+    ctx.font='28px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('👄',0,0); ctx.restore();
+  });
+}
+
+function drawParticles() {
+  particles.forEach(p=>{
+    ctx.save(); ctx.globalAlpha=p.life;
+    ctx.font=`${p.size}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(p.emoji,p.x,p.y); ctx.restore();
+  });
+}
+
+function drawFloatTexts() {
+  floatTexts.forEach(t=>{
+    ctx.save(); ctx.globalAlpha=t.life;
+    ctx.fillStyle='#ffd700'; ctx.font='bold 20px Segoe UI';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.shadowColor='#000'; ctx.shadowBlur=5;
+    ctx.fillText(t.text,t.x,t.y); ctx.restore();
+  });
+}
+
+// ── Menu ──────────────────────────────────────────────────────
+function drawMenu() {
+  drawBg();
+  ctx.save();
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+
+  ctx.font=`bold ${Math.min(56,W*0.06)}px Segoe UI`;
+  ctx.fillStyle='#ffd700'; ctx.shadowColor='#ffd700'; ctx.shadowBlur=30;
+  ctx.fillText('🍔 Munch Munch!', W/2, H/2-120);
+
+  ctx.shadowBlur=0;
+  ctx.font='21px Segoe UI'; ctx.fillStyle='#ccc';
+  ctx.fillText('Choose your mode', W/2, H/2-62);
+
+  const cx=W/2;
+  if (pt2Unlocked) {
+    // 3-button row
+    drawBtn(cx-215, H/2-10, 130, 62, '⏱️ Timed',   '#6c63ff','#4c1d95');
+    drawBtn(cx- 65, H/2-10, 130, 62, '♾️ Endless', '#e84393','#7b1450');
+    const pulse = 0.6+Math.sin(Date.now()*0.005)*0.4;
+    ctx.shadowColor=`rgba(255,215,0,${pulse})`; ctx.shadowBlur=18*pulse;
+    drawBtn(cx+  85, H/2-10, 130, 62, '🍔 Pt.2',   '#b8860b','#5c4000');
+    ctx.shadowBlur=0;
+    ctx.font='11px Segoe UI'; ctx.fillStyle='#666'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('Coming soon...', cx+150, H/2+60);
+  } else {
+    drawBtn(cx-145, H/2-10, 130, 62, '⏱️ Timed',   '#6c63ff','#4c1d95');
+    drawBtn(cx+ 15, H/2-10, 130, 62, '♾️ Endless', '#e84393','#7b1450');
+  }
+
+  // Boss Rush button (always visible, below main row)
+  ctx.shadowBlur=0;
+  drawBtn(W/2-75, H/2+62, 150, 48, '💀 Boss Rush', '#dc2626','#7f1d1d');
+
+  // Color picker
+  ctx.font='12px Segoe UI'; ctx.fillStyle='#666'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText('PICK YOUR COLOR', W/2, H/2+160);
+  const swW=28, swGap=8, swTotal=SWATCHES.length;
+  const swStartX=W/2-(swTotal*(swW+swGap)-swGap)/2;
+  SWATCHES.forEach((sw,i)=>{
+    const sx=swStartX+i*(swW+swGap), sy=H/2+174;
+    ctx.save();
+    if (i===selectedSwatch) { ctx.shadowColor=sw.l; ctx.shadowBlur=14; }
+    ctx.fillStyle=sw.l;
+    ctx.beginPath(); ctx.arc(sx+swW/2, sy+swW/2, swW/2, 0, Math.PI*2); ctx.fill();
+    if (i===selectedSwatch) {
+      ctx.strokeStyle='#fff'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.arc(sx+swW/2, sy+swW/2, swW/2+3, 0, Math.PI*2); ctx.stroke();
+    }
+    ctx.restore();
+  });
+
+  // Leaderboard + Achievements + Cosmetics buttons
+  drawBtn(W/2-195, H/2+216, 118, 38, '🏆 Leaderboard', '#b7960c','#7a6100');
+  drawBtn(W/2-59,  H/2+216, 118, 38, '🏅 Achievements', '#1d4ed8','#1e3a8a');
+  drawBtn(W/2+77,  H/2+216, 118, 38, '✨ Cosmetics', '#7c3aed','#4c1d95');
+
+  // Konami progress dots
+  if (!konamiUnlocked && konamiProgress > 0) {
+    const symbols = ['↑','↑','↓','↓','←','→','←','→','B','A'];
+    ctx.font='18px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    const dotW = 26, total = symbols.length;
+    const startX = W/2 - (total*dotW)/2 + dotW/2;
+    for (let i=0;i<total;i++){
+      ctx.fillStyle = i < konamiProgress ? '#00ff44' : '#444';
+      ctx.shadowColor = i < konamiProgress ? '#00ff44' : 'none';
+      ctx.shadowBlur = i < konamiProgress ? 8 : 0;
+      ctx.fillText(symbols[i], startX+i*dotW, H/2+148);
+    }
+    ctx.shadowBlur=0;
+  }
+
+  if (konamiUnlocked) {
+    const pulse = Math.sin(Date.now()*0.008)*0.5+0.5;
+    const rainbow = `hsl(${Date.now()*0.2%360},100%,60%)`;
+    ctx.shadowColor = rainbow; ctx.shadowBlur = 20+pulse*20;
+    const flash2 = konamiFlash > 0 && Math.floor(Date.now()/120)%2===0;
+    if (!flash2) {
+      drawBtn(W/2-65, H/2+268, 130, 50, '🍦 ???', rainbow, '#2d3436');
+    }
+    if (konamiFlash > 0) {
+      ctx.save();
+      ctx.globalAlpha = konamiFlash/180;
+      ctx.font='bold 28px Segoe UI';
+      ctx.fillStyle='#00ff44'; ctx.shadowColor='#00ff44'; ctx.shadowBlur=30;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText('🔓 SECRET MODE UNLOCKED!', W/2, H/2+255);
+      ctx.restore();
+    }
+  }
+  ctx.restore();
+}
+
+function drawBtn(x, y, w, h, label, c1, c2) {
+  const g=ctx.createLinearGradient(x,y,x,y+h);
+  g.addColorStop(0,c1); g.addColorStop(1,c2);
+  ctx.shadowColor=c1; ctx.shadowBlur=14;
+  ctx.fillStyle=g;
+  ctx.beginPath();
+  ctx.roundRect(x,y,w,h,12);
+  ctx.fill();
+  ctx.shadowBlur=0; ctx.fillStyle='#fff';
+  ctx.font='bold 16px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillText(label,x+w/2,y+h/2);
+}
+
+// ── Game Over ─────────────────────────────────────────────────
+function drawGameOver() {
+  ctx.save();
+  ctx.fillStyle='rgba(0,0,0,0.74)'; ctx.fillRect(0,0,W,H);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+
+  ctx.font='bold 52px Segoe UI'; ctx.fillStyle='#ffd700';
+  ctx.shadowColor='#ffd700'; ctx.shadowBlur=30;
+  ctx.fillText(gameMode==='timed'?"⏱️ Time's Up!":'🎮 Game Over!', W/2, H/2-75);
+
+  ctx.shadowBlur=0; ctx.font='bold 28px Segoe UI'; ctx.fillStyle='#fff';
+  ctx.fillText(`You ate ${score} food${score!==1?'s':''}!`, W/2, H/2);
+
+  ctx.font='20px Segoe UI'; ctx.fillStyle='#aaa';
+  ctx.fillText(`Final size: ${player.sizeMultiplier.toFixed(1)}×`, W/2, H/2+44);
+
+  ctx.font='bold 17px Segoe UI'; ctx.fillStyle='#6c63ff';
+  ctx.shadowColor='#6c63ff'; ctx.shadowBlur=10;
+  ctx.fillText('Click to return to menu', W/2, H/2+105);
+  ctx.restore();
+}
+
+// ── Ending cutscene update + draw ────────────────────────────
+function updateEndingCutscene() {
+  const c = endingCutscene;
+  c.timer++;
+  c.blobAngle += 0.02;
+  c.vortexAngle += 0.06;
+
+  if (c.phase === 0) {
+    // grow blob toward full-screen (scale 1 = fills canvas)
+    c.blobScale = Math.min(1, c.blobScale + 0.0022);
+    if (c.timer >= 360) c.phase = 1;
+  } else if (c.phase === 1) {
+    // vortex — spin faster, shrink blob into vortex center
+    c.vortexAngle += 0.1;
+    c.blobScale = Math.max(0, c.blobScale - 0.012);
+    if (c.timer >= 560) { c.phase = 2; c.blobScale = 0.04; }
+  } else if (c.phase === 2) {
+    // new world: blob stays tiny, world expands around it
+    if (c.timer >= 760) { c.phase = 3; pt2Unlocked = true; unlockAchievement('true_ending'); saveProgress(); }
+  }
+}
+
+function drawEndingCutscene() {
+  const c = endingCutscene;
+  const t = c.timer;
+  const phase = c.phase;
+  const cx = W/2, cy = H/2;
+
+  // ── Phase 0: blob eating food ──────────────────────────────
+  if (phase === 0) {
+    // cosmic dark bg
+    ctx.fillStyle = '#050510'; ctx.fillRect(0,0,W,H);
+    // subtle nebula glow behind blob
+    const nebula = ctx.createRadialGradient(cx,cy,0,cx,cy,W*0.6*c.blobScale+80);
+    nebula.addColorStop(0,'rgba(108,99,255,0.18)');
+    nebula.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=nebula; ctx.fillRect(0,0,W,H);
+
+    // flying food moving inward
+    c.flyingFood.forEach(f => {
+      if (t < f.delay) return;
+      const progress = Math.min(1, (t - f.delay) / 180);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const fx = f.x + (cx - f.x) * eased;
+      const fy = f.y + (cy - f.y) * eased;
+      const alpha = progress < 0.9 ? 1 : (1 - progress)/0.1;
+      ctx.save(); ctx.globalAlpha = Math.max(0, alpha);
+      ctx.font = `${f.size}px serif`; ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(f.emoji, fx, fy);
+      ctx.restore();
+    });
+
+    // the growing blob
+    drawCutsceneBlob(cx, cy, c.blobScale, c.blobAngle, t);
+
+    // text
+    const fadeIn = Math.min(1, t / 60);
+    ctx.save(); ctx.globalAlpha = fadeIn;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='bold 26px Segoe UI'; ctx.fillStyle='#a78bfa';
+    ctx.shadowColor='#6c63ff'; ctx.shadowBlur=20;
+    ctx.fillText('The Original... grows...', cx, 55);
+    // size label
+    const dispSize = Math.min(50, Math.round(1 + c.blobScale * 49));
+    ctx.font='bold 20px Segoe UI'; ctx.fillStyle='#ffd700'; ctx.shadowBlur=10;
+    ctx.fillText(`${dispSize}×`, cx, H - 44);
+    ctx.restore();
+  }
+
+  // ── Phase 1: vortex suck-in ────────────────────────────────
+  else if (phase === 1) {
+    ctx.fillStyle='#020208'; ctx.fillRect(0,0,W,H);
+    const vt = t - 360;
+    // spinning vortex rings
+    for (let ring = 8; ring >= 0; ring--) {
+      const rFrac = ring / 8;
+      const radius = (1 - rFrac) * Math.min(W,H)*0.48 + rFrac*10;
+      const hue = 260 + ring*12;
+      const alpha = 0.08 + rFrac*0.25;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(c.vortexAngle * (ring%2===0?1:-1) + ring*0.4);
+      ctx.strokeStyle=`hsla(${hue},80%,60%,${alpha})`;
+      ctx.lineWidth = 2+rFrac*6;
+      ctx.beginPath(); ctx.arc(0,0,radius,0,Math.PI*1.7); ctx.stroke();
+      ctx.restore();
+    }
+    // centre hole glow
+    const holeGrad = ctx.createRadialGradient(cx,cy,0,cx,cy,120);
+    holeGrad.addColorStop(0,'rgba(50,0,100,0.95)');
+    holeGrad.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=holeGrad; ctx.fillRect(0,0,W,H);
+
+    // blob spiralling in
+    if (c.blobScale > 0) {
+      const spiral = vt * 2.5;
+      const bx2 = cx + Math.cos(c.vortexAngle*3)*spiral*0.15;
+      const by2 = cy + Math.sin(c.vortexAngle*3)*spiral*0.15;
+      drawCutsceneBlob(bx2, by2, c.blobScale, c.vortexAngle*4, t);
+    }
+
+    ctx.save(); ctx.textAlign='center';
+    ctx.font='bold 30px Segoe UI'; ctx.fillStyle='#dfe6e9';
+    ctx.shadowColor='#a29bfe'; ctx.shadowBlur=20;
+    ctx.fillText('A vortex opens...', cx, 55);
+    ctx.restore();
+  }
+
+  // ── Phase 2: vast new world ────────────────────────────────
+  else if (phase === 2) {
+    const wt = t - 560;
+    const fadeIn = Math.min(1, wt/60);
+
+    // vast starfield bg
+    ctx.fillStyle='#020210'; ctx.fillRect(0,0,W,H);
+    ctx.save(); ctx.globalAlpha=fadeIn;
+    c.starField.forEach(s => {
+      // pan stars to suggest enormous scale
+      const sx = ((s.x + W*3) % (W*6)) - W*2.5;
+      const sy = ((s.y + H*3) % (H*6)) - H*2.5;
+      // only draw stars visible on canvas
+      if (sx < -10 || sx > W+10 || sy < -10 || sy > H+10) return;
+      const twinkle = 0.5 + Math.sin(Date.now()*0.002 + s.bright*10)*0.5;
+      ctx.fillStyle=`rgba(255,255,255,${twinkle*s.bright})`;
+      ctx.beginPath(); ctx.arc(sx,sy,s.r,0,Math.PI*2); ctx.fill();
+    });
+
+    // gigantic ground grid suggesting vast scale
+    ctx.strokeStyle=`rgba(100,100,255,${0.08*fadeIn})`;
+    ctx.lineWidth=1;
+    const gridSize = 80;
+    for (let gx=0;gx<W;gx+=gridSize){ ctx.beginPath(); ctx.moveTo(gx,H*0.55); ctx.lineTo(gx,H); ctx.stroke(); }
+    for (let gy=Math.floor(H*0.55);gy<H;gy+=gridSize){ ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(W,gy); ctx.stroke(); }
+
+    // horizon glow
+    const horizGrad = ctx.createLinearGradient(0,H*0.45,0,H*0.7);
+    horizGrad.addColorStop(0,'rgba(108,99,255,0.25)');
+    horizGrad.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=horizGrad; ctx.fillRect(0,H*0.45,W,H*0.3);
+    ctx.restore();
+
+    // tiny blob in new world
+    const tinyR = 18;
+    drawCutsceneBlob(cx, H*0.72, 0.04, c.blobAngle, t);
+
+    // scale markers showing how big the world is
+    ctx.save(); ctx.globalAlpha=fadeIn;
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='bold 28px Segoe UI'; ctx.fillStyle='#a78bfa';
+    ctx.shadowColor='#6c63ff'; ctx.shadowBlur=20;
+    ctx.fillText('A new, bigger world...', cx, 55);
+    ctx.font='18px Segoe UI'; ctx.fillStyle='#dfe6e9'; ctx.shadowBlur=0;
+    ctx.fillText('Still 50× ...but the world is so much larger.', cx, 95);
+    // arrow pointing to tiny blob
+    ctx.fillStyle='#ffd700'; ctx.font='bold 15px Segoe UI';
+    ctx.fillText('▼ that\'s you', cx, H*0.72 - tinyR - 28);
+    ctx.restore();
+  }
+
+  // ── Phase 3: win screen ────────────────────────────────────
+  else if (phase === 3) {
+    ctx.fillStyle='#010108'; ctx.fillRect(0,0,W,H);
+    c.starField.forEach(s => {
+      const sx = ((s.x + W*3) % (W*6)) - W*2.5;
+      const sy = ((s.y + H*3) % (H*6)) - H*2.5;
+      if (sx<-10||sx>W+10||sy<-10||sy>H+10) return;
+      const twinkle=0.5+Math.sin(Date.now()*0.002+s.bright*10)*0.5;
+      ctx.fillStyle=`rgba(255,255,255,${twinkle*s.bright})`;
+      ctx.beginPath(); ctx.arc(sx,sy,s.r,0,Math.PI*2); ctx.fill();
+    });
+
+    const hue = Date.now()*0.08%360;
+    ctx.save(); ctx.textAlign='center'; ctx.textBaseline='middle';
+
+    ctx.font=`${Math.min(100,W*0.1)}px serif`;
+    ctx.fillText('🏆', cx, H/2-160);
+
+    ctx.font=`bold ${Math.min(72,W*0.07)}px Segoe UI`;
+    ctx.fillStyle=`hsl(${hue},100%,65%)`;
+    ctx.shadowColor=`hsl(${hue},100%,65%)`; ctx.shadowBlur=50;
+    ctx.fillText('YOU WIN?', cx, H/2-60);
+
+    ctx.shadowBlur=0; ctx.font='22px Segoe UI'; ctx.fillStyle='#b2bec3';
+    ctx.fillText('The blob grows beyond imagination.', cx, H/2+10);
+    ctx.fillText('But what lies further in this vast world...?', cx, H/2+44);
+
+    ctx.font='bold 18px Segoe UI';
+    ctx.fillStyle=`hsl(${hue},100%,72%)`;
+    ctx.shadowColor=`hsl(${hue},100%,72%)`; ctx.shadowBlur=12;
+    ctx.fillText('Click anywhere to return to main menu', cx, H/2+110);
+    ctx.restore();
+  }
+}
+
+function drawCutsceneBlob(x, y, scale, angle, t) {
+  const maxR = Math.max(W, H) * 0.7; // max radius fills screen
+  const r = maxR * scale;
+  if (r < 1) return;
+
+  ctx.save(); ctx.translate(x, y);
+  const wb = 1 + Math.sin(t*0.05)*0.04;
+  ctx.scale(wb, 1/wb);
+
+  ctx.shadowColor='#6c63ff'; ctx.shadowBlur=Math.min(60, r*0.3);
+  const grad = ctx.createRadialGradient(-r*0.25,-r*0.25,0,0,0,r);
+  grad.addColorStop(0,'#c4b5fd'); grad.addColorStop(1,'#3b0764');
+  ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+
+  // eyes (only visible when not giant)
+  if (r < W*0.4) {
+    const eyeR = Math.max(3, r*0.16);
+    const ex=Math.cos(angle)*r*0.3, ey=Math.sin(angle)*r*0.3;
+    const esp=r*0.25;
+    const px=-Math.sin(angle)*esp, py=Math.cos(angle)*esp;
+    for(let s=-1;s<=1;s+=2){
+      ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(ex+px*s,ey+py*s,eyeR,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#1a1a2e'; ctx.beginPath(); ctx.arc(ex+px*s+Math.cos(angle)*eyeR*0.4,ey+py*s+Math.sin(angle)*eyeR*0.4,eyeR*0.5,0,Math.PI*2); ctx.fill();
+    }
+    // happy mouth
+    ctx.strokeStyle='#fff'; ctx.lineWidth=Math.max(2,r*0.06); ctx.lineCap='round';
+    const mx2=Math.cos(angle)*r*0.42, my2=Math.sin(angle)*r*0.42;
+    ctx.beginPath(); ctx.arc(mx2,my2,r*0.2,angle+0.15,angle+Math.PI-0.15); ctx.stroke();
+  } else {
+    // so big just show a subtle surface pattern
+    ctx.strokeStyle='rgba(167,139,250,0.12)'; ctx.lineWidth=r*0.04;
+    for(let i=1;i<=3;i++){
+      ctx.beginPath(); ctx.arc(0,0,r*(0.3+i*0.2),0,Math.PI*2); ctx.stroke();
+    }
+  }
+  ctx.restore();
+}
+
+// ── Main loop ─────────────────────────────────────────────────
+// ── Achievement toasts ────────────────────────────────────────
+function drawAchievementToasts() {
+  achievementToasts = achievementToasts.filter(t => t.timer > 0);
+  achievementToasts.forEach((t, idx) => {
+    t.timer--;
+    const alpha = t.timer < 40 ? t.timer/40 : t.timer > 240 ? (280-t.timer)/40 : 1;
+    const y = H - 80 - idx * 72;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.shadowColor = '#f59e0b'; ctx.shadowBlur = 18;
+    ctx.fillStyle = '#1a1a2e';
+    ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(W-280, y, 260, 58, 12); ctx.fill(); ctx.stroke();
+    ctx.shadowBlur = 0;
+    ctx.font = 'bold 11px Segoe UI'; ctx.fillStyle = '#f59e0b';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillText('ACHIEVEMENT UNLOCKED', W-260, y+14);
+    ctx.font = '22px serif'; ctx.fillText(t.a.icon, W-262, y+38);
+    ctx.font = 'bold 13px Segoe UI'; ctx.fillStyle = '#fff';
+    ctx.fillText(t.a.name, W-234, y+32);
+    ctx.font = '11px Segoe UI'; ctx.fillStyle = '#aaa';
+    ctx.fillText(t.a.desc, W-234, y+46);
+    ctx.restore();
+  });
+}
+
+// ── Achievements screen ───────────────────────────────────────
+let achScrollY = 0;
+let achMaxScroll = 0;
+const ACH_LIST_TOP = 96, ACH_LIST_BOTTOM_PAD = 70;
+
+function drawAchievements() {
+  ctx.save();
+  ctx.fillStyle = 'rgba(10,10,30,0.96)';
+  ctx.fillRect(0, 0, W, H);
+  ctx.font = 'bold 32px Segoe UI'; ctx.fillStyle = '#f59e0b';
+  ctx.shadowColor = '#f59e0b'; ctx.shadowBlur = 20;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('🏅 Achievements', W/2, 54);
+  ctx.shadowBlur = 0;
+
+  const cols = 2, cellW = (W-80)/cols, cellH = 68, padX = 40;
+  const listBottom = H - ACH_LIST_BOTTOM_PAD;
+  const rows = Math.ceil(ACHIEVEMENTS.length / cols);
+  const contentH = rows * cellH;
+  achMaxScroll = Math.max(0, contentH - (listBottom - ACH_LIST_TOP));
+  achScrollY = Math.max(0, Math.min(achScrollY, achMaxScroll));
+
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, ACH_LIST_TOP - 6, W, listBottom - ACH_LIST_TOP + 6); ctx.clip();
+  ACHIEVEMENTS.forEach((a, i) => {
+    const col = i % cols, row = Math.floor(i / cols);
+    const x = padX + col * cellW, y = ACH_LIST_TOP + row * cellH - achScrollY;
+    if (y + cellH < ACH_LIST_TOP - 10 || y > listBottom + 10) return; // cull offscreen
+    const done = unlockedAchievements.has(a.id);
+    ctx.save();
+    ctx.globalAlpha = done ? 1 : 0.4;
+    ctx.fillStyle = done ? '#1e293b' : '#0f172a';
+    ctx.strokeStyle = done ? '#f59e0b' : '#334155';
+    ctx.lineWidth = done ? 2 : 1;
+    ctx.beginPath(); ctx.roundRect(x, y, cellW-16, cellH-10, 10); ctx.fill(); ctx.stroke();
+    const isSecret = a.secret && !done;
+    ctx.font = '26px serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#fff';
+    ctx.fillText(done ? a.icon : '❓', x+14, y+(cellH-10)/2);
+    ctx.font = 'bold 13px Segoe UI'; ctx.fillStyle = done ? '#fff' : '#64748b';
+    ctx.fillText(a.name, x+52, y+20);
+    ctx.font = '11px Segoe UI'; ctx.fillStyle = done ? '#94a3b8' : '#475569';
+    ctx.fillText(isSecret ? 'Figure it out 😏' : a.desc, x+52, y+38);
+    ctx.restore();
+  });
+  ctx.restore();
+
+  // scroll indicator
+  if (achMaxScroll > 0) {
+    const trackH = listBottom - ACH_LIST_TOP;
+    const thumbH = Math.max(24, trackH * (trackH / contentH));
+    const thumbY = ACH_LIST_TOP + (trackH - thumbH) * (achScrollY / achMaxScroll);
+    ctx.fillStyle = 'rgba(245,158,11,0.5)';
+    ctx.beginPath(); ctx.roundRect(W - 14, thumbY, 6, thumbH, 3); ctx.fill();
+  }
+
+  const total = ACHIEVEMENTS.length, earned = unlockedAchievements.size;
+  ctx.font = '14px Segoe UI'; ctx.fillStyle = '#64748b';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${earned} / ${total} unlocked`, W/2, H-54);
+  drawBtn(W/2-60, H-40, 120, 30, '← Back', '#334155', '#1e293b');
+  ctx.restore();
+}
+
+function loop(ts) {
+  update(ts);
+  drawBg();
+
+  if (gameState==='cutscene') {
+    drawEndingCutscene();
+  } else if (gameState==='menu') {
+    drawMenu();
+  } else {
+    if (gameState === 'win') {
+      drawBlobs();
+      drawParticles();
+      drawIceCreamPlayer();
+      drawFloatTexts();
+      drawWinScreen();
+    } else if (gameMode === 'secret') {
+      drawBlobs();
+      drawPurpleBoss();
+      drawEatCutscene();
+      drawParticles();
+      drawIceCreamPlayer();
+    } else {
+      drawKetchup();
+      drawGerms();
+      drawPowerUps();
+      foods.forEach(drawFood);
+      drawMedicines();
+      drawPizzaBoss();
+      drawBurgerBoss();
+      drawBacteriaBoss();
+      drawPepperoni();
+      drawMouths();
+      drawTrailParticles();
+      drawParticles();
+      drawPlayer();
+      drawActivePowerUpHUD();
+      drawMedicineTimer();
+      drawPoisonBanner();
+      drawBacteriaBanner();
+    }
+    drawFloatTexts();
+    if (gameState==='gameover') drawGameOver();
+    if (gameState==='achievements') drawAchievements();
+    if (gameState==='cosmetics') drawCosmetics();
+  }
+  drawAchievementToasts();
+  drawMobileToggle();
+  drawSuggestionsBtn();
+  drawJoystick();
+  requestAnimationFrame(loop);
+}
+
+timerStat.style.display='none';
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
