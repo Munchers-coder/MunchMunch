@@ -2760,6 +2760,8 @@ function updateFoodRun(dt) {
   const playerScreenX = W * 0.22;
   const chaserTarget = playerScreenX - 80;
   if (fr.chaserX > chaserTarget) fr.chaserX = chaserTarget;
+  // Chaser can never actually reach the player
+  if (fr.chaserX > playerScreenX - 55) fr.chaserX = playerScreenX - 55;
 
   // Spawn obstacle columns
   fr.spawnTimer++;
@@ -2793,12 +2795,6 @@ function updateFoodRun(dt) {
     }
   }
 
-  // Chaser catches player
-  if (fr.chaserX >= px - pr - 10) {
-    fr.dead = true; fr.deathTimer = 0;
-    if (fr.distance > fr.bestDistance) fr.bestDistance = fr.distance;
-    for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
-  }
 
   // Particles
   fr.particles.forEach(p => { p.x+=p.vx; p.y+=p.vy; p.life-=0.04; });
