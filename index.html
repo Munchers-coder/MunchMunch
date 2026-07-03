@@ -2492,11 +2492,38 @@ function drawPlayer() {
   }
 
   // Hat
-  const HAT_EMOJIS = { monkey:'🐒', crown:'👑', tophat:'🎩', party:'🎉', chef:'👨‍🍳' };
-  if (equippedHat !== 'none' && HAT_EMOJIS[equippedHat]) {
-    ctx.font = `${r * 1.1}px serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(HAT_EMOJIS[equippedHat], 0, -r * 0.85);
+  if (equippedHat === 'crown' || equippedHat === 'tophat' || equippedHat === 'monkey') {
+    const EMOJI = { crown:'👑', tophat:'🎩', monkey:'🐵' };
+    ctx.font = `${r * 1.2}px serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillText(EMOJI[equippedHat], 0, -r * 0.75);
+  } else if (equippedHat === 'party') {
+    // Draw a party hat cone
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(0, -r * 1.55);
+    ctx.lineTo(-r * 0.45, -r * 0.75);
+    ctx.lineTo(r * 0.45, -r * 0.75);
+    ctx.closePath();
+    ctx.fillStyle = '#f43f5e'; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = r * 0.06; ctx.stroke();
+    // stripes
+    ctx.beginPath(); ctx.moveTo(-r*0.15, -r*1.35); ctx.lineTo(r*0.15, -r*1.35);
+    ctx.strokeStyle = '#fbbf24'; ctx.lineWidth = r*0.08; ctx.stroke();
+    // pom pom
+    ctx.beginPath(); ctx.arc(0, -r*1.55, r*0.12, 0, Math.PI*2);
+    ctx.fillStyle = '#fbbf24'; ctx.fill();
+    ctx.restore();
+  } else if (equippedHat === 'chef') {
+    // Draw a white chef hat
+    ctx.save();
+    // brim
+    ctx.beginPath(); ctx.roundRect(-r*0.5, -r*0.95, r, r*0.2, r*0.05);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    // puff top
+    ctx.beginPath(); ctx.arc(0, -r*1.25, r*0.38, 0, Math.PI*2);
+    ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.restore();
   }
 
   // Mouth
