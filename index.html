@@ -2712,16 +2712,16 @@ function startFoodRun() {
   gameState = 'playing';
   timerStat.style.display = 'none';
   stopMusic();
-  const gap = H * 0.38;
+  const gap = H * 0.30;
   fr = {
-    speed: 2.8,
+    speed: 4.5,
     playerY: H * 0.5,
     playerVY: 0,
-    chaserX: -120,
+    chaserX: -60,
     distance: 0,
     obstacles: [],
     spawnTimer: 0,
-    spawnInterval: 200,
+    spawnInterval: 150,
     particles: [],
     dead: false,
     deathTimer: 0,
@@ -2738,7 +2738,7 @@ function updateFoodRun(dt) {
   }
 
   // Increase speed over time
-  fr.speed = Math.min(10, 2.8 + fr.distance * 0.0008);
+  fr.speed = Math.min(14, 4.5 + fr.distance * 0.0018);
   fr.distance += fr.speed;
 
   // Player vertical movement
@@ -2754,20 +2754,19 @@ function updateFoodRun(dt) {
   if (mobileMode && fr.touchDown) fr.playerVY = Math.min(moveSpeed,  fr.playerVY + 0.8);
 
   // Chaser moves right, catching up as speed increases
-  const chaserSpeed = fr.speed * 0.72;
+  const chaserSpeed = fr.speed * 0.88;
   fr.chaserX += chaserSpeed;
   const playerScreenX = W * 0.22;
-  // chaser lags behind player screen position
-  const chaserTarget = playerScreenX - 120;
-  if (fr.chaserX > chaserTarget) fr.chaserX = chaserTarget; // keep it behind
+  const chaserTarget = playerScreenX - 80;
+  if (fr.chaserX > chaserTarget) fr.chaserX = chaserTarget;
 
   // Spawn obstacle columns
   fr.spawnTimer++;
-  fr.spawnInterval = Math.max(100, 200 - fr.distance * 0.04);
+  fr.spawnInterval = Math.max(60, 150 - fr.distance * 0.06);
   if (fr.spawnTimer >= fr.spawnInterval) {
     fr.spawnTimer = 0;
     const gapCenter = H * 0.15 + Math.random() * H * 0.7;
-    const gapSize = Math.max(H * 0.25, fr.gapSize - fr.distance * 0.01);
+    const gapSize = Math.max(H * 0.18, fr.gapSize - fr.distance * 0.02);
     fr.obstacles.push({ x: W + 40, gapCenter, gapSize,
       emojis: Array.from({length: 12}, ()=> FR_OBS_EMOJIS[Math.floor(Math.random()*FR_OBS_EMOJIS.length)]) });
   }
