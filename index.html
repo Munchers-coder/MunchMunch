@@ -925,6 +925,11 @@ canvas.addEventListener('touchstart', e => {
       canvas.dispatchEvent(new MouseEvent('click', { clientX: t.clientX, clientY: t.clientY }));
       continue;
     }
+    if (gameState === 'playing' && gameMode === 'foodrun') {
+      fr.touchUp   = ty < H / 2;
+      fr.touchDown = ty >= H / 2;
+      continue;
+    }
     if (gameState === 'playing') {
       // Shoot button (right side normally, left in left-hand mode)
       const shootSide = leftHandMode ? tx < W / 2 : tx > W / 2;
@@ -949,6 +954,12 @@ canvas.addEventListener('touchstart', e => {
 
 canvas.addEventListener('touchmove', e => {
   e.preventDefault();
+  if (gameMode === 'foodrun' && mobileMode) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleY = H / rect.height;
+    const ty = (e.changedTouches[0].clientY - rect.top) * scaleY;
+    fr.touchUp = ty < H / 2; fr.touchDown = ty >= H / 2;
+  }
   if (!mobileMode) return;
   for (const t of e.changedTouches) {
     if (t.identifier === joystick.touchId) {
@@ -973,6 +984,7 @@ canvas.addEventListener('touchmove', e => {
 
 canvas.addEventListener('touchend', e => {
   e.preventDefault();
+  if (gameMode === 'foodrun') { fr.touchUp = false; fr.touchDown = false; }
   for (const t of e.changedTouches) {
     if (t.identifier === joystick.touchId) {
       joystick.active = false; joystick.touchId = null; joystick.dx = 0; joystick.dy = 0;
@@ -1586,7 +1598,8 @@ canvas.addEventListener('click', e => {
     if (mx>timedX  &&mx<timedX+130  &&my>H/2-10&&my<H/2+52) startGame('timed');
     if (mx>endlessX&&mx<endlessX+130&&my>H/2-10&&my<H/2+52) startGame('endless');
     if (pt2Unlocked&&mx>cx+85&&mx<cx+215&&my>H/2-10&&my<H/2+52) { /* coming soon */ }
-    if (mx>W/2-75&&mx<W/2+75&&my>H/2+62&&my<H/2+110) { startGame('bossrush'); return; }
+    if (mx>W/2-165&&mx<W/2-15&&my>H/2+62&&my<H/2+110) { startGame('bossrush'); return; }
+    if (mx>W/2+15&&mx<W/2+165&&my>H/2+62&&my<H/2+110) { startFoodRun(); return; }
     // Swatch color picker
     { const swW=28,swGap=8,swTotal=SWATCHES.length,swStartX=W/2-(swTotal*(swW+swGap)-swGap)/2;
       const sy=H/2+174;
@@ -1649,6 +1662,7 @@ canvas.addEventListener('click', e => {
 let lastTime = 0;
 function update(ts) {
   if (gameState==='cutscene') { updateEndingCutscene(); return; }
+  if (gameState==='playing' && gameMode==='foodrun') { updateFoodRun(ts); return; }
   if (gameState!=='playing' && gameState!=='win') return;
   if (gameState==='win') { particles.forEach(p=>{p.x+=p.vx;p.y+=p.vy;p.vy+=0.11;p.life-=0.03;}); particles=particles.filter(p=>p.life>0); floatTexts.forEach(t=>{t.y+=t.vy;t.life-=0.018;}); floatTexts=floatTexts.filter(t=>t.life>0); return; }
   if (gameState!=='playing') return;
@@ -2688,6 +2702,257 @@ function drawFloatTexts() {
 }
 
 // ── Menu ──────────────────────────────────────────────────────
+// ── FOOD RUN MODE ─────────────────────────────────────────────
+let fr = {};
+const FR_FOOD_EMOJIS = ['🍕','🌮','🍔','🌭','🍟','🍩','🍦','🧁','🍰','🍫'];
+const FR_OBS_EMOJIS  = ['🥦','🥕','🌽','🧅','🥒','🍆'];
+
+function startFoodRun() {
+  gameMode = 'foodrun';
+  gameState = 'playing';
+  timerStat.style.display = 'none';
+  stopMusic();
+  const gap = H * 0.38;
+  fr = {
+    speed: 2.8,
+    playerY: H * 0.5,
+    playerVY: 0,
+    chaserX: -120,
+    distance: 0,
+    obstacles: [],
+    spawnTimer: 0,
+    spawnInterval: 200,
+    particles: [],
+    dead: false,
+    deathTimer: 0,
+    bestDistance: fr.bestDistance || 0,
+    gapSize: gap,
+  };
+}
+
+function updateFoodRun(dt) {
+  if (fr.dead) {
+    fr.deathTimer++;
+    if (fr.deathTimer > 120) { gameState = 'menu'; stopMusic(); resetHint(); }
+    return;
+  }
+
+  // Increase speed over time
+  fr.speed = Math.min(10, 2.8 + fr.distance * 0.0008);
+  fr.distance += fr.speed;
+
+  // Player vertical movement
+  const moveSpeed = 4.5;
+  if (keys['ArrowUp'] || keys['w'] || keys['W'])   fr.playerVY = Math.max(-moveSpeed, fr.playerVY - 0.8);
+  if (keys['ArrowDown'] || keys['s'] || keys['S']) fr.playerVY = Math.min(moveSpeed,  fr.playerVY + 0.8);
+  // friction when no key held
+  if (!keys['ArrowUp'] && !keys['w'] && !keys['W'] && !keys['ArrowDown'] && !keys['s'] && !keys['S']) fr.playerVY *= 0.75;
+  fr.playerY = Math.max(30, Math.min(H - 30, fr.playerY + fr.playerVY));
+
+  // Mobile touch: top half = up, bottom half = down
+  if (mobileMode && fr.touchUp)   fr.playerVY = Math.max(-moveSpeed, fr.playerVY - 0.8);
+  if (mobileMode && fr.touchDown) fr.playerVY = Math.min(moveSpeed,  fr.playerVY + 0.8);
+
+  // Chaser moves right, catching up as speed increases
+  const chaserSpeed = fr.speed * 0.72;
+  fr.chaserX += chaserSpeed;
+  const playerScreenX = W * 0.22;
+  // chaser lags behind player screen position
+  const chaserTarget = playerScreenX - 120;
+  if (fr.chaserX > chaserTarget) fr.chaserX = chaserTarget; // keep it behind
+
+  // Spawn obstacle columns
+  fr.spawnTimer++;
+  fr.spawnInterval = Math.max(100, 200 - fr.distance * 0.04);
+  if (fr.spawnTimer >= fr.spawnInterval) {
+    fr.spawnTimer = 0;
+    const gapCenter = H * 0.15 + Math.random() * H * 0.7;
+    const gapSize = Math.max(H * 0.25, fr.gapSize - fr.distance * 0.01);
+    fr.obstacles.push({ x: W + 40, gapCenter, gapSize,
+      emojis: Array.from({length: 12}, ()=> FR_OBS_EMOJIS[Math.floor(Math.random()*FR_OBS_EMOJIS.length)]) });
+  }
+
+  // Move obstacles
+  fr.obstacles.forEach(o => o.x -= fr.speed);
+  fr.obstacles = fr.obstacles.filter(o => o.x > -60);
+
+  // Collision with obstacles
+  const pr = 18;
+  const px = playerScreenX;
+  const py = fr.playerY;
+  for (const o of fr.obstacles) {
+    if (Math.abs(o.x - px) < pr + 22) {
+      const topEnd   = o.gapCenter - o.gapSize / 2;
+      const botStart = o.gapCenter + o.gapSize / 2;
+      if (py - pr < topEnd || py + pr > botStart) {
+        fr.dead = true; fr.deathTimer = 0;
+        if (fr.distance > fr.bestDistance) fr.bestDistance = fr.distance;
+        for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
+        return;
+      }
+    }
+  }
+
+  // Chaser catches player
+  if (fr.chaserX >= px - pr - 10) {
+    fr.dead = true; fr.deathTimer = 0;
+    if (fr.distance > fr.bestDistance) fr.bestDistance = fr.distance;
+    for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
+  }
+
+  // Particles
+  fr.particles.forEach(p => { p.x+=p.vx; p.y+=p.vy; p.life-=0.04; });
+  fr.particles = fr.particles.filter(p=>p.life>0);
+}
+
+function drawFoodRun() {
+  // Background
+  ctx.fillStyle = '#0f0f23';
+  ctx.fillRect(0,0,W,H);
+
+  // Scrolling grid lines for speed feel
+  ctx.strokeStyle = 'rgba(100,100,200,0.12)';
+  ctx.lineWidth = 1;
+  const lineSpacing = 80;
+  const offset = (fr.distance * 1.2) % lineSpacing;
+  for (let x = -offset; x < W + lineSpacing; x += lineSpacing) {
+    ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,H); ctx.stroke();
+  }
+  for (let y = 0; y < H; y += lineSpacing) {
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+
+  // Obstacle columns
+  const emojiSize = 28;
+  fr.obstacles.forEach(o => {
+    const topEnd   = o.gapCenter - o.gapSize / 2;
+    const botStart = o.gapCenter + o.gapSize / 2;
+    ctx.font = `${emojiSize}px serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    // Top block
+    let y = emojiSize/2;
+    let idx = 0;
+    while (y < topEnd - emojiSize/2) {
+      ctx.fillText(o.emojis[idx % o.emojis.length], o.x, y);
+      y += emojiSize; idx++;
+    }
+    // Bottom block
+    y = botStart + emojiSize/2;
+    while (y < H + emojiSize) {
+      ctx.fillText(o.emojis[idx % o.emojis.length], o.x, y);
+      y += emojiSize; idx++;
+    }
+    // Gap indicator
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([6,6]);
+    ctx.beginPath(); ctx.moveTo(o.x - 20, o.gapCenter); ctx.lineTo(o.x + 20, o.gapCenter); ctx.stroke();
+    ctx.setLineDash([]);
+  });
+
+  // Chaser — rolling food cluster
+  const chaserEmojis = FR_FOOD_EMOJIS;
+  const cr = 48 + Math.sin(Date.now()*0.008)*4;
+  ctx.save();
+  ctx.shadowColor = '#ff4444'; ctx.shadowBlur = 30;
+  for (let i = 0; i < 8; i++) {
+    const angle = (Date.now() * 0.003 + i * Math.PI * 2/8);
+    const ex = fr.chaserX + Math.cos(angle) * cr * 0.6;
+    const ey = H/2 + Math.sin(angle) * cr * 0.5;
+    ctx.font = '28px serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(chaserEmojis[i % chaserEmojis.length], ex, ey);
+  }
+  ctx.font = '38px serif';
+  ctx.fillText(chaserEmojis[Math.floor(Date.now()/300) % chaserEmojis.length], fr.chaserX, H/2);
+  ctx.restore();
+
+  // Warning flash when chaser is close
+  const px = W * 0.22;
+  const dist = px - fr.chaserX;
+  if (dist < 140 && !fr.dead) {
+    ctx.fillStyle = `rgba(255,0,0,${0.12*(1-(dist/140))*(Math.sin(Date.now()*0.02)*0.5+0.5)})`;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  // Player blob
+  if (!fr.dead || Math.floor(fr.deathTimer/6)%2===0) {
+    const sw = SWATCHES[selectedSwatch];
+    ctx.save();
+    ctx.translate(px, fr.playerY);
+    ctx.shadowColor = sw.l; ctx.shadowBlur = 18;
+    ctx.fillStyle = sw.d;
+    ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = sw.l;
+    ctx.beginPath(); ctx.arc(0, 0, 16, 0, Math.PI*2); ctx.fill();
+    // eyes
+    ctx.shadowBlur = 0;
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(6,-4,4,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(6,4,4,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#222'; ctx.beginPath(); ctx.arc(8,-4,2,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#222'; ctx.beginPath(); ctx.arc(8,4,2,0,Math.PI*2); ctx.fill();
+    // hat
+    if (equippedHat === 'crown' || equippedHat === 'tophat' || equippedHat === 'monkey') {
+      const EMOJI = { crown:'👑', tophat:'🎩', monkey:'🐵' };
+      ctx.font='22px serif'; ctx.textAlign='center'; ctx.textBaseline='bottom';
+      ctx.fillText(EMOJI[equippedHat], 0, -14);
+    }
+    ctx.restore();
+  }
+
+  // Death particles
+  fr.particles.forEach(p => {
+    ctx.save(); ctx.globalAlpha = p.life;
+    ctx.fillStyle = p.color;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 6*p.life, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  });
+
+  // HUD
+  ctx.fillStyle='#fff'; ctx.font='bold 20px Segoe UI';
+  ctx.textAlign='left'; ctx.textBaseline='top';
+  ctx.shadowColor='#000'; ctx.shadowBlur=8;
+  ctx.fillText(`🏃 ${Math.floor(fr.distance)}m`, 12, 50);
+  if (fr.bestDistance > 0) {
+    ctx.font='14px Segoe UI'; ctx.fillStyle='#aaa';
+    ctx.fillText(`Best: ${Math.floor(fr.bestDistance)}m`, 12, 74);
+  }
+  ctx.shadowBlur=0;
+
+  // Speed indicator
+  const speedPct = (fr.speed - 2.8) / (10 - 2.8);
+  ctx.fillStyle='rgba(0,0,0,0.4)'; ctx.fillRect(W-14, 50, 10, H-100);
+  ctx.fillStyle=`hsl(${120-speedPct*120},90%,50%)`;
+  const barH = (H-100) * Math.min(1, speedPct);
+  ctx.fillRect(W-14, H-50-barH, 10, barH);
+  ctx.font='10px Segoe UI'; ctx.fillStyle='#888'; ctx.textAlign='center';
+  ctx.fillText('SPD', W-9, 45);
+
+  // Death screen
+  if (fr.dead) {
+    ctx.fillStyle=`rgba(0,0,0,${Math.min(0.7, fr.deathTimer*0.01)})`;
+    ctx.fillRect(0,0,W,H);
+    if (fr.deathTimer > 20) {
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.font='bold 40px Segoe UI'; ctx.fillStyle='#ff4444';
+      ctx.shadowColor='#ff4444'; ctx.shadowBlur=20;
+      ctx.fillText('CAUGHT!', W/2, H/2-40);
+      ctx.shadowBlur=0;
+      ctx.font='24px Segoe UI'; ctx.fillStyle='#fff';
+      ctx.fillText(`${Math.floor(fr.distance)}m`, W/2, H/2+10);
+      ctx.font='16px Segoe UI'; ctx.fillStyle='#aaa';
+      ctx.fillText('Returning to menu...', W/2, H/2+50);
+    }
+  }
+
+  // Mobile controls hint
+  if (mobileMode && !fr.dead && fr.distance < 300) {
+    ctx.fillStyle='rgba(255,255,255,0.25)';
+    ctx.font='13px Segoe UI'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('▲ tap top / ▼ tap bottom', W/2, H-20);
+  }
+}
+// ── END FOOD RUN ───────────────────────────────────────────────
+
 function drawMenu() {
   drawBg();
   ctx.save();
@@ -2717,9 +2982,10 @@ function drawMenu() {
     drawBtn(cx+ 15, H/2-10, 130, 62, '♾️ Endless', '#e84393','#7b1450');
   }
 
-  // Boss Rush button (always visible, below main row)
+  // Boss Rush + Food Run buttons
   ctx.shadowBlur=0;
-  drawBtn(W/2-75, H/2+62, 150, 48, '💀 Boss Rush', '#dc2626','#7f1d1d');
+  drawBtn(W/2-165, H/2+62, 150, 48, '💀 Boss Rush', '#dc2626','#7f1d1d');
+  drawBtn(W/2+15,  H/2+62, 150, 48, '🏃 Food Run',  '#16a34a','#14532d');
 
   // Color picker
   ctx.font='12px Segoe UI'; ctx.fillStyle='#666'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -3147,6 +3413,8 @@ function loop(ts) {
     drawEndingCutscene();
   } else if (gameState==='menu') {
     drawMenu();
+  } else if (gameMode==='foodrun') {
+    drawFoodRun();
   } else {
     if (gameState === 'win') {
       drawBlobs();
