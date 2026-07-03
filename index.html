@@ -616,7 +616,7 @@ function saveProgress() {
     achievements: [...unlockedAchievements],
     triedSwatches: [...triedSwatches],
     totalFoodsEaten, totalRunsPlayed, totalPowerUpsCollected,
-    equippedShape, equippedTrail, equippedHat,
+    equippedShape, equippedTrail, equippedHat, leftHandMode,
   }));
 }
 function loadProgress() {
@@ -633,6 +633,7 @@ function loadProgress() {
     if (d.equippedShape) equippedShape = d.equippedShape;
     if (d.equippedTrail) equippedTrail = d.equippedTrail;
     if (d.equippedHat)   equippedHat   = d.equippedHat;
+    if (d.leftHandMode)  leftHandMode  = d.leftHandMode;
   } catch(e) {}
 }
 // ── Konami code ───────────────────────────────────────────────
@@ -813,8 +814,9 @@ const keys = {};
 let mobileMode = isTouchDevice;
 const JOY_R = 65, JOY_KNOB_R = 28;
 const SHOOT_BTN_R = 38;
-// Shoot button fixed at bottom-right
-function shootBtnX() { return W - SHOOT_BTN_R - 24; }
+let leftHandMode = false;
+// Shoot button: bottom-right normally, bottom-left in left-hand mode
+function shootBtnX() { return leftHandMode ? SHOOT_BTN_R + 24 : W - SHOOT_BTN_R - 24; }
 function shootBtnY() { return H - SHOOT_BTN_R - 24; }
 
 // Joystick: dynamic — spawns where you touch on the LEFT half of screen
@@ -831,6 +833,17 @@ function drawMobileToggle() {
   ctx.beginPath(); ctx.roundRect(8, 8, 82, 30, 8); ctx.fill();
   ctx.shadowBlur = 0; ctx.fillStyle = '#fff';
   ctx.fillText(on ? '📱 Mobile ON' : '📱 Mobile', 49, 23);
+  ctx.restore();
+}
+
+function drawLeftHandToggle() {
+  ctx.save();
+  ctx.fillStyle = leftHandMode ? '#0ea5e9' : '#334155';
+  ctx.shadowColor = leftHandMode ? '#0ea5e9' : 'transparent'; ctx.shadowBlur = leftHandMode ? 10 : 0;
+  ctx.beginPath(); ctx.roundRect(W/2 - 48, 8, 96, 30, 8); ctx.fill();
+  ctx.shadowBlur = 0; ctx.fillStyle = '#fff';
+  ctx.font = 'bold 12px Segoe UI'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(leftHandMode ? '🤚 Left ON' : '🤚 Left Hand', W/2, 23);
   ctx.restore();
 }
 
@@ -911,8 +924,9 @@ canvas.addEventListener('touchstart', e => {
       continue;
     }
     if (gameState === 'playing') {
-      // Shoot button (right side)
-      if (burgerBoss && shootBtn.touchId === null && tx > W / 2) {
+      // Shoot button (right side normally, left in left-hand mode)
+      const shootSide = leftHandMode ? tx < W / 2 : tx > W / 2;
+      if (burgerBoss && shootBtn.touchId === null && shootSide) {
         const sx = shootBtnX(), sy = shootBtnY();
         if (Math.hypot(tx - sx, ty - sy) < SHOOT_BTN_R + 20) {
           shootBtn.touchId = t.identifier;
@@ -920,8 +934,9 @@ canvas.addEventListener('touchstart', e => {
           continue;
         }
       }
-      // Joystick: LEFT half of screen
-      if (!joystick.active && tx < W / 2) {
+      // Joystick: LEFT half normally, RIGHT half in left-hand mode
+      const joySide = leftHandMode ? tx > W / 2 : tx < W / 2;
+      if (!joystick.active && joySide) {
         joystick.active = true; joystick.touchId = t.identifier;
         joystick.baseX = tx; joystick.baseY = ty;
         joystick.dx = 0; joystick.dy = 0;
@@ -1557,6 +1572,8 @@ canvas.addEventListener('click', e => {
 
   // Mobile toggle button (top-left, always clickable)
   if (mx > 8 && mx < 90 && my > 8 && my < 38) { mobileMode = !mobileMode; return; }
+  // Left-hand mode toggle (top-center, always clickable)
+  if (mx > W/2 - 48 && mx < W/2 + 48 && my > 8 && my < 38) { leftHandMode = !leftHandMode; saveProgress(); return; }
   // Suggestions button (top-right, always clickable)
   if (mx > W - 90 && mx < W - 8 && my > 8 && my < 38) { openSuggestions(); return; }
 
@@ -3140,6 +3157,7 @@ function loop(ts) {
   }
   drawAchievementToasts();
   drawMobileToggle();
+  drawLeftHandToggle();
   drawSuggestionsBtn();
   drawJoystick();
   requestAnimationFrame(loop);
