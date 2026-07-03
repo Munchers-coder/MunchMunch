@@ -908,6 +908,8 @@ canvas.addEventListener('touchstart', e => {
     const tx = (t.clientX - rect.left) * scaleX, ty = (t.clientY - rect.top) * scaleY;
     // mobile toggle tap
     if (tx > 8 && tx < 90 && ty > 8 && ty < 38) { mobileMode = !mobileMode; continue; }
+    // left-hand mode toggle tap
+    if (tx > W/2 - 48 && tx < W/2 + 48 && ty > 8 && ty < 38) { leftHandMode = !leftHandMode; saveProgress(); continue; }
     if (!mobileMode) continue;
     if (gameState === 'gameover' || gameState === 'win') {
       gameState = 'menu'; stopMusic(); resetHint(); continue;
