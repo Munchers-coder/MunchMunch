@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -7,7 +7,7 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
-     background: #1a1a2e;
+    background: #1a1a2e;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -520,7 +520,6 @@ const COSMETIC_SHAPES = [
   { id:'star',   name:'Star',   icon:'⭐', desc:'Unlock: Speed Demon',       req:'speed_25' },
   { id:'spiky',  name:'Spiky',  icon:'🦔', desc:'Unlock: Pizza Slayer',      req:'pizza_slayer' },
   { id:'boxy',   name:'Boxy',   icon:'🟦', desc:'Unlock: True Colors',       req:'colorful' },
-  { id:'crown',  name:'Crown',  icon:'👑', desc:'Unlock: Boss Rush Champion', req:'boss_rush_win' },
 ];
 const COSMETIC_TRAILS = [
   { id:'none',    name:'None',     icon:'✖️', desc:'Clean and simple',        req: null },
@@ -530,8 +529,12 @@ const COSMETIC_TRAILS = [
   { id:'rainbow', name:'Rainbow',  icon:'🌈', desc:'Unlock: Centurion',       req:'centurion' },
 ];
 const COSMETIC_HATS = [
-  { id:'none',   name:'None',       icon:'✖️', desc:'No hat',              req: null },
-  { id:'monkey', name:'Monkey Hat', icon:'🐒', desc:'Unlock: Ice Cream Dream', req:'secret_clear' },
+  { id:'none',   name:'None',       icon:'✖️', desc:'No hat',                    req: null },
+  { id:'crown',  name:'Crown',      icon:'👑', desc:'Unlock: Boss Rush Champion', req:'boss_rush_win' },
+  { id:'monkey', name:'Monkey Hat', icon:'🐒', desc:'Unlock: Ice Cream Dream',    req:'secret_clear' },
+  { id:'tophat', name:'Top Hat',    icon:'🎩', desc:'Unlock: Speedrunner',          req:'speedrunner' },
+  { id:'party',  name:'Party Hat',  icon:'🎉', desc:'Unlock: True Colors',          req:'colorful' },
+  { id:'chef',   name:'Chef Hat',   icon:'👨‍🍳', desc:'Unlock: Big Eater',            req:'big_eater' },
 ];
 let equippedShape = 'circle';
 let equippedTrail = 'none';
@@ -2404,20 +2407,6 @@ function drawPlayerBody(r, wobbleX, wobbleY, sw) {
     ctx.closePath(); ctx.fill();
   } else if (equippedShape === 'boxy') {
     ctx.beginPath(); ctx.roundRect(-r,-r,r*2,r*2,r*0.35); ctx.fill();
-  } else if (equippedShape === 'crown') {
-    ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
-    // crown points on top
-    ctx.fillStyle = sw.l;
-    const cw = r*0.55, ch = r*0.5;
-    ctx.beginPath();
-    ctx.moveTo(-cw, -r*0.7);
-    ctx.lineTo(-cw, -r*1.22);
-    ctx.lineTo(-cw*0.3, -r*0.9);
-    ctx.lineTo(0, -r*1.32);
-    ctx.lineTo(cw*0.3, -r*0.9);
-    ctx.lineTo(cw, -r*1.22);
-    ctx.lineTo(cw, -r*0.7);
-    ctx.closePath(); ctx.fill();
   } else {
     ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fill();
   }
@@ -2486,10 +2475,11 @@ function drawPlayer() {
   }
 
   // Hat
-  if (equippedHat === 'monkey') {
+  const HAT_EMOJIS = { monkey:'🐒', crown:'👑', tophat:'🎩', party:'🎉', chef:'👨‍🍳' };
+  if (equippedHat !== 'none' && HAT_EMOJIS[equippedHat]) {
     ctx.font = `${r * 1.1}px serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('🐒', 0, -r * 0.85);
+    ctx.fillText(HAT_EMOJIS[equippedHat], 0, -r * 0.85);
   }
 
   // Mouth
