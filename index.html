@@ -2742,16 +2742,17 @@ function updateFoodRun(dt) {
   fr.distance += fr.speed;
 
   // Player vertical movement
-  const moveSpeed = 4.5;
-  if (keys['ArrowUp'] || keys['w'] || keys['W'])   fr.playerVY = Math.max(-moveSpeed, fr.playerVY - 0.8);
-  if (keys['ArrowDown'] || keys['s'] || keys['S']) fr.playerVY = Math.min(moveSpeed,  fr.playerVY + 0.8);
+  const moveSpeed = 4.5 + (fr.speed - 4.5) * 0.6;
+  const accel = 0.8 + (fr.speed - 4.5) * 0.1;
+  if (keys['ArrowUp'] || keys['w'] || keys['W'])   fr.playerVY = Math.max(-moveSpeed, fr.playerVY - accel);
+  if (keys['ArrowDown'] || keys['s'] || keys['S']) fr.playerVY = Math.min(moveSpeed,  fr.playerVY + accel);
   // friction when no key held
   if (!keys['ArrowUp'] && !keys['w'] && !keys['W'] && !keys['ArrowDown'] && !keys['s'] && !keys['S']) fr.playerVY *= 0.75;
   fr.playerY = Math.max(30, Math.min(H - 30, fr.playerY + fr.playerVY));
 
   // Mobile touch: top half = up, bottom half = down
-  if (mobileMode && fr.touchUp)   fr.playerVY = Math.max(-moveSpeed, fr.playerVY - 0.8);
-  if (mobileMode && fr.touchDown) fr.playerVY = Math.min(moveSpeed,  fr.playerVY + 0.8);
+  if (mobileMode && fr.touchUp)   fr.playerVY = Math.max(-moveSpeed, fr.playerVY - accel);
+  if (mobileMode && fr.touchDown) fr.playerVY = Math.min(moveSpeed,  fr.playerVY + accel);
 
   // Chaser moves right, catching up as speed increases
   const chaserSpeed = fr.speed * 0.88;
