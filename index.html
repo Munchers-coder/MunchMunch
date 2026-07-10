@@ -590,6 +590,10 @@ const ACHIEVEMENTS = [
   { id:'pizza_planet',  icon:'🛸', name:'Pizza Planet',      desc:'Go green and defeat the Pizza Boss', secret:true },
   { id:'ketchup_bath',  icon:'🍅', name:'Ketchup Bath',      desc:'Get sauced by the Burger Boss 3 times in one run and still beat him', secret:true },
   { id:'code_red',      icon:'🔴', name:'Code Red',          desc:'Go red and reach 10× size', secret:true },
+  { id:'fr_500',        icon:'🏃', name:'On the Run',         desc:'Survive 500m in Food Run' },
+  { id:'fr_1000',       icon:'💨', name:'Speed Demon Runner', desc:'Survive 1000m in Food Run' },
+  { id:'fr_2000',       icon:'🌪️', name:'Unstoppable Runner', desc:'Survive 2000m in Food Run' },
+  { id:'fr_veggie',     icon:'🥦', name:'Salad Dodger',       desc:'Survive a full Food Run without hitting a single veggie wall', secret:true },
 ];
 let unlockedAchievements = new Set();
 let triedSwatches = new Set();
@@ -2729,6 +2733,7 @@ function startFoodRun() {
     deathTimer: 0,
     bestDistance: fr.bestDistance || 0,
     gapSize: gap,
+    neverHit: true,
   };
 }
 
@@ -2885,10 +2890,18 @@ function updateFoodRun(dt) {
   if (hit) {
     fr.dead = true; fr.deathTimer = 0;
     if (fr.distance > fr.bestDistance) fr.bestDistance = fr.distance;
+    // neverHit is still true here if player never touched anything
+    if (fr.neverHit && fr.distance >= 500) unlockAchievement('fr_veggie');
+    fr.neverHit = false;
     for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
     return;
   }
 
+
+  // Distance achievements
+  if (fr.distance >= 500)  unlockAchievement('fr_500');
+  if (fr.distance >= 1000) unlockAchievement('fr_1000');
+  if (fr.distance >= 2000) unlockAchievement('fr_2000');
 
   // Particles
   fr.particles.forEach(p => { p.x+=p.vx; p.y+=p.vy; p.life-=0.04; });
