@@ -2765,71 +2765,128 @@ function updateFoodRun(dt) {
   // Chaser can never actually reach the player
   if (fr.chaserX > playerScreenX - 55) fr.chaserX = playerScreenX - 55;
 
-  // Spawn obstacle columns
+  // Spawn obstacles
   fr.spawnTimer++;
-  fr.spawnInterval = Math.max(60, 150 - fr.distance * 0.06);
+  fr.spawnInterval = Math.max(70, 160 - fr.distance * 0.05);
   if (fr.spawnTimer >= fr.spawnInterval) {
     fr.spawnTimer = 0;
-    const gapSize = Math.max(H * 0.22, fr.gapSize - fr.distance * 0.02);
-    // Clamp gap center so it can't jump more than 30% of screen from last position
+    const gapSize = Math.max(H * 0.22, fr.gapSize - fr.distance * 0.015);
     const maxShift = H * 0.28;
     const rawCenter = H * 0.15 + Math.random() * H * 0.7;
-    const gapCenter = Math.max(
-      Math.min(fr.lastGapCenter + maxShift, rawCenter),
-      fr.lastGapCenter - maxShift
-    );
+    const gapCenter = Math.max(Math.min(fr.lastGapCenter + maxShift, rawCenter), fr.lastGapCenter - maxShift);
     const clampedCenter = Math.max(gapSize/2 + 20, Math.min(H - gapSize/2 - 20, gapCenter));
     fr.lastGapCenter = clampedCenter;
+    const veg = () => FR_OBS_EMOJIS[Math.floor(Math.random()*FR_OBS_EMOJIS.length)];
+    const emojis = Array.from({length:14}, veg);
 
-    // Pick obstacle type randomly (more variety as distance increases)
-    const roll = Math.random();
-    const emojis = Array.from({length:14}, ()=> FR_OBS_EMOJIS[Math.floor(Math.random()*FR_OBS_EMOJIS.length)]);
-    if (roll < 0.6) {
-      // Standard gap column
-      fr.obstacles.push({ type:'column', x: W+40, gapCenter: clampedCenter, gapSize, emojis });
-    } else if (roll < 0.8) {
-      // Double column close together
-      fr.obstacles.push({ type:'column', x: W+40,  gapCenter: clampedCenter, gapSize, emojis });
-      fr.obstacles.push({ type:'column', x: W+100, gapCenter: clampedCenter, gapSize, emojis });
-    } else {
-      // Column + floating block in the gap
-      fr.obstacles.push({ type:'column', x: W+40, gapCenter: clampedCenter, gapSize, emojis });
-      const floatY = clampedCenter + (Math.random()-0.5) * (gapSize * 0.4);
-      fr.floaters.push({ x: W+40, y: floatY, vy: (Math.random()-0.5)*1.2,
-        emoji: FR_OBS_EMOJIS[Math.floor(Math.random()*FR_OBS_EMOJIS.length)], size: 26 });
+    const types = ['column','ring','snake','spinner','zigzag'];
+    const available = fr.distance < 400 ? ['column','ring'] : types;
+    const type = available[Math.floor(Math.random()*available.length)];
+
+    if (type === 'column') {
+      // Classic gap wall
+      fr.obstacles.push({ type:'column', x:W+40, gapCenter:clampedCenter, gapSize, emojis });
+
+    } else if (type === 'ring') {
+      // Ring of veggies — fly through the hole in the middle
+      const ringR = Math.min(H*0.28, gapSize*0.9);
+      fr.obstacles.push({ type:'ring', x:W+60, cx:W+60, cy:clampedCenter,
+        r:ringR, count:10, angle:0, emoji:veg() });
+
+    } else if (type === 'snake') {
+      // A row of veggies that oscillates up and down — dodge above or below
+      const snakeY = H*0.2 + Math.random()*H*0.6;
+      const count = 6 + Math.floor(Math.random()*4);
+      fr.obstacles.push({ type:'snake', x:W+40, baseY:snakeY, count,
+        phase: Math.random()*Math.PI*2, amp: H*0.18, emoji:veg() });
+
+    } else if (type === 'spinner') {
+      // Veggies spinning around a center — weave through the gaps
+      fr.obstacles.push({ type:'spinner', x:W+60, cx:W+60, cy:H/2,
+        r:H*0.22, count:4, angle:Math.random()*Math.PI*2,
+        speed:0.04+Math.random()*0.03, emoji:veg() });
+
+    } else if (type === 'zigzag') {
+      // Diagonal rows of veggies with gaps to squeeze through
+      const dir = Math.random()<0.5 ? 1 : -1;
+      fr.obstacles.push({ type:'zigzag', x:W+40, dir, phase:0, emoji:veg() });
     }
   }
 
-  // Move obstacles & floaters
-  fr.obstacles.forEach(o => o.x -= fr.speed);
-  fr.obstacles = fr.obstacles.filter(o => o.x > -60);
-  fr.floaters.forEach(f => { f.x -= fr.speed; f.y += f.vy; if (f.y < 20 || f.y > H-20) f.vy *= -1; });
+  // Update & move obstacles
+  const now = Date.now();
+  fr.obstacles.forEach(o => {
+    o.x -= fr.speed;
+    if (o.cx !== undefined) o.cx -= fr.speed;
+    if (o.type === 'spinner') o.angle += o.speed;
+    if (o.type === 'snake')   o.phase += 0.04;
+    if (o.type === 'zigzag')  o.phase += 0.05;
+    if (o.type === 'ring')    o.angle += 0.03;
+  });
+  fr.obstacles = fr.obstacles.filter(o => (o.cx ?? o.x) > -120);
+  fr.floaters.forEach(f => { f.x -= fr.speed; f.y += f.vy; if (f.y<20||f.y>H-20) f.vy*=-1; });
   fr.floaters = fr.floaters.filter(f => f.x > -60);
 
-  // Collision with obstacles
   const pr = 18;
   const px = playerScreenX;
   const py = fr.playerY;
+  let hit = false;
+
   for (const o of fr.obstacles) {
-    if (Math.abs(o.x - px) < pr + 22) {
-      const topEnd   = o.gapCenter - o.gapSize / 2;
-      const botStart = o.gapCenter + o.gapSize / 2;
-      if (py - pr < topEnd || py + pr > botStart) {
-        fr.dead = true; fr.deathTimer = 0;
-        if (fr.distance > fr.bestDistance) fr.bestDistance = fr.distance;
-        for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
-        return;
+    if (o.type === 'column') {
+      if (Math.abs(o.x - px) < pr + 20) {
+        const topEnd = o.gapCenter - o.gapSize/2, botStart = o.gapCenter + o.gapSize/2;
+        if (py - pr < topEnd || py + pr > botStart) { hit = true; break; }
       }
+    } else if (o.type === 'ring') {
+      if (Math.abs(o.cx - px) < o.r + pr + 14) {
+        // Must be inside the ring hole; veggies are on the ring edge
+        const distToCenter = Math.hypot(px - o.cx, py - o.cy);
+        // Check if player is near any of the ring veggies
+        for (let i = 0; i < o.count; i++) {
+          const a = o.angle + (i / o.count) * Math.PI * 2;
+          const vx = o.cx + Math.cos(a) * o.r, vy = o.cy + Math.sin(a) * o.r;
+          if (Math.hypot(px - vx, py - vy) < pr + 16) { hit = true; break; }
+        }
+        if (hit) break;
+      }
+    } else if (o.type === 'snake') {
+      for (let i = 0; i < o.count; i++) {
+        const sx = o.x + i * 38, sy = o.baseY + Math.sin(o.phase + i * 0.7) * o.amp;
+        if (Math.hypot(px - sx, py - sy) < pr + 16) { hit = true; break; }
+      }
+      if (hit) break;
+    } else if (o.type === 'spinner') {
+      for (let i = 0; i < o.count; i++) {
+        const a = o.angle + (i / o.count) * Math.PI * 2;
+        const vx = o.cx + Math.cos(a) * o.r, vy = o.cy + Math.sin(a) * o.r;
+        if (Math.hypot(px - vx, py - vy) < pr + 16) { hit = true; break; }
+      }
+      if (hit) break;
+    } else if (o.type === 'zigzag') {
+      for (let i = 0; i < 8; i++) {
+        const zx = o.x + i * 44;
+        const zy = H/2 + Math.sin(o.phase + i * 1.1) * H * 0.32 * o.dir;
+        if (Math.hypot(px - zx, py - zy) < pr + 16) { hit = true; break; }
+        // second row offset
+        const zy2 = H/2 - Math.sin(o.phase + i * 1.1 + Math.PI) * H * 0.32 * o.dir;
+        if (Math.hypot(px - zx, py - zy2) < pr + 16) { hit = true; break; }
+      }
+      if (hit) break;
     }
   }
-  // Collision with floaters
-  for (const f of fr.floaters) {
-    if (Math.hypot(f.x - px, f.y - py) < pr + f.size * 0.5) {
-      fr.dead = true; fr.deathTimer = 0;
-      if (fr.distance > fr.bestDistance) fr.bestDistance = fr.distance;
-      for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
-      return;
+
+  if (!hit) {
+    for (const f of fr.floaters) {
+      if (Math.hypot(f.x - px, f.y - py) < pr + 14) { hit = true; break; }
     }
+  }
+
+  if (hit) {
+    fr.dead = true; fr.deathTimer = 0;
+    if (fr.distance > fr.bestDistance) fr.bestDistance = fr.distance;
+    for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
+    return;
   }
 
 
@@ -2855,38 +2912,67 @@ function drawFoodRun() {
     ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
   }
 
-  // Obstacle columns
-  const emojiSize = 28;
+  // Draw all obstacles
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   fr.obstacles.forEach(o => {
-    const topEnd   = o.gapCenter - o.gapSize / 2;
-    const botStart = o.gapCenter + o.gapSize / 2;
-    ctx.font = `${emojiSize}px serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    // Top block
-    let y = emojiSize/2;
-    let idx = 0;
-    while (y < topEnd - emojiSize/2) {
-      ctx.fillText(o.emojis[idx % o.emojis.length], o.x, y);
-      y += emojiSize; idx++;
+    if (o.type === 'column') {
+      const topEnd = o.gapCenter - o.gapSize/2, botStart = o.gapCenter + o.gapSize/2;
+      ctx.font = '28px serif';
+      let y = 14, idx = 0;
+      while (y < topEnd - 14) { ctx.fillText(o.emojis[idx%o.emojis.length], o.x, y); y+=28; idx++; }
+      y = botStart + 14;
+      while (y < H+28) { ctx.fillText(o.emojis[idx%o.emojis.length], o.x, y); y+=28; idx++; }
+      // arrow hints
+      ctx.font = '16px serif'; ctx.globalAlpha = 0.4;
+      ctx.fillText('→', o.x-36, o.gapCenter);
+      ctx.globalAlpha = 1;
+
+    } else if (o.type === 'ring') {
+      ctx.font = '28px serif';
+      for (let i = 0; i < o.count; i++) {
+        const a = o.angle + (i/o.count)*Math.PI*2;
+        ctx.fillText(o.emoji, o.cx + Math.cos(a)*o.r, o.cy + Math.sin(a)*o.r);
+      }
+      // hole indicator
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+      ctx.lineWidth = 2; ctx.setLineDash([4,6]);
+      ctx.beginPath(); ctx.arc(o.cx, o.cy, o.r*0.45, 0, Math.PI*2); ctx.stroke();
+      ctx.setLineDash([]); ctx.restore();
+
+    } else if (o.type === 'snake') {
+      ctx.font = '30px serif';
+      for (let i = 0; i < o.count; i++) {
+        const sx = o.x + i*38, sy = o.baseY + Math.sin(o.phase + i*0.7)*o.amp;
+        ctx.fillText(o.emoji, sx, sy);
+      }
+
+    } else if (o.type === 'spinner') {
+      ctx.font = '30px serif';
+      for (let i = 0; i < o.count; i++) {
+        const a = o.angle + (i/o.count)*Math.PI*2;
+        ctx.fillText(o.emoji, o.cx + Math.cos(a)*o.r, o.cy + Math.sin(a)*o.r);
+      }
+      // faint orbit circle
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,100,0.12)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(o.cx, o.cy, o.r, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+
+    } else if (o.type === 'zigzag') {
+      ctx.font = '28px serif';
+      for (let i = 0; i < 8; i++) {
+        const zx = o.x + i*44;
+        ctx.fillText(o.emoji, zx, H/2 + Math.sin(o.phase + i*1.1)*H*0.32*o.dir);
+        ctx.fillText(o.emoji, zx, H/2 - Math.sin(o.phase + i*1.1 + Math.PI)*H*0.32*o.dir);
+      }
     }
-    // Bottom block
-    y = botStart + emojiSize/2;
-    while (y < H + emojiSize) {
-      ctx.fillText(o.emojis[idx % o.emojis.length], o.x, y);
-      y += emojiSize; idx++;
-    }
-    // Gap indicator
-    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([6,6]);
-    ctx.beginPath(); ctx.moveTo(o.x - 20, o.gapCenter); ctx.lineTo(o.x + 20, o.gapCenter); ctx.stroke();
-    ctx.setLineDash([]);
   });
 
   // Draw floaters
   fr.floaters.forEach(f => {
     ctx.font = `${f.size}px serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(f.emoji, f.x, f.y);
   });
 
@@ -3453,7 +3539,7 @@ function loop(ts) {
     drawEndingCutscene();
   } else if (gameState==='menu') {
     drawMenu();
-  } else if (gameMode==='foodrun') {
+  } else if (gameMode==='foodrun' && gameState==='playing') {
     drawFoodRun();
   } else {
     if (gameState === 'win') {
