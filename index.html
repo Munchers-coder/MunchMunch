@@ -644,6 +644,7 @@ const ACHIEVEMENTS = [
   { id:'pizza_planet',  icon:'🛸', name:'Pizza Planet',      desc:'Go green and defeat the Pizza Boss', secret:true },
   { id:'ketchup_bath',  icon:'🍅', name:'Ketchup Bath',      desc:'Get sauced by the Burger Boss 3 times in one run and still beat him', secret:true },
   { id:'code_red',      icon:'🔴', name:'Code Red',          desc:'Go red and reach 10× size', secret:true },
+  { id:'i_love_veggies', icon:'🥦', name:'I Love Veggies', desc:'Die to the very first obstacle in Food Run', secret:true },
   { id:'fr_500',        icon:'🏃', name:'On the Run',         desc:'Survive 5000m in Food Run' },
   { id:'fr_1000',       icon:'💨', name:'Speed Demon Runner', desc:'Survive 10000m in Food Run' },
   { id:'fr_2000',       icon:'🌪️', name:'Unstoppable Runner', desc:'Survive 20000m in Food Run' },
@@ -2787,6 +2788,7 @@ function startFoodRun() {
     bestDistance: fr.bestDistance || 0,
     gapSize: gap,
     neverHit: true,
+    passedFirst: false,
   };
 }
 
@@ -2876,6 +2878,7 @@ function updateFoodRun(dt) {
   fr.obstacles.forEach(o => {
     o.x -= fr.speed;
     if (o.cx !== undefined) o.cx -= fr.speed;
+    if ((o.cx ?? o.x) < W * 0.22 - 40) fr.passedFirst = true;
     if (o.type === 'spinner') o.angle += o.speed;
     if (o.type === 'snake')   o.phase += 0.04;
     if (o.type === 'zigzag')  o.phase += 0.05;
@@ -2943,6 +2946,7 @@ function updateFoodRun(dt) {
   if (hit) {
     fr.dead = true; fr.deathTimer = 0;
     if (fr.distance > fr.bestDistance) fr.bestDistance = fr.distance;
+    if (!fr.passedFirst) unlockAchievement('i_love_veggies');
     fr.neverHit = false;
     setTimeout(() => openFoodRunLeaderboard(fr.distance), 1400);
     for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
