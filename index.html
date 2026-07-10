@@ -2704,7 +2704,7 @@ function drawFloatTexts() {
 // ── Menu ──────────────────────────────────────────────────────
 // ── FOOD RUN MODE ─────────────────────────────────────────────
 let fr = {};
-const FR_FOOD_EMOJIS = ['🍕','🌮','🍔','🌭','🍟','🍩','🍦','🧁','🍰','🍫'];
+const FR_VEG_EMOJIS  = ['🥦','🥕','🌽','🧅','🥒','🍆','🧄','🥬','🌶️','🥑'];
 const FR_OBS_EMOJIS  = ['🥦','🥕','🌽','🧅','🥒','🍆'];
 
 function startFoodRun() {
@@ -2720,8 +2720,10 @@ function startFoodRun() {
     chaserX: -60,
     distance: 0,
     obstacles: [],
+    floaters: [],
     spawnTimer: 0,
     spawnInterval: 150,
+    lastGapCenter: H * 0.5,
     particles: [],
     dead: false,
     deathTimer: 0,
@@ -2768,15 +2770,41 @@ function updateFoodRun(dt) {
   fr.spawnInterval = Math.max(60, 150 - fr.distance * 0.06);
   if (fr.spawnTimer >= fr.spawnInterval) {
     fr.spawnTimer = 0;
-    const gapCenter = H * 0.15 + Math.random() * H * 0.7;
-    const gapSize = Math.max(H * 0.18, fr.gapSize - fr.distance * 0.02);
-    fr.obstacles.push({ x: W + 40, gapCenter, gapSize,
-      emojis: Array.from({length: 12}, ()=> FR_OBS_EMOJIS[Math.floor(Math.random()*FR_OBS_EMOJIS.length)]) });
+    const gapSize = Math.max(H * 0.22, fr.gapSize - fr.distance * 0.02);
+    // Clamp gap center so it can't jump more than 30% of screen from last position
+    const maxShift = H * 0.28;
+    const rawCenter = H * 0.15 + Math.random() * H * 0.7;
+    const gapCenter = Math.max(
+      Math.min(fr.lastGapCenter + maxShift, rawCenter),
+      fr.lastGapCenter - maxShift
+    );
+    const clampedCenter = Math.max(gapSize/2 + 20, Math.min(H - gapSize/2 - 20, gapCenter));
+    fr.lastGapCenter = clampedCenter;
+
+    // Pick obstacle type randomly (more variety as distance increases)
+    const roll = Math.random();
+    const emojis = Array.from({length:14}, ()=> FR_OBS_EMOJIS[Math.floor(Math.random()*FR_OBS_EMOJIS.length)]);
+    if (roll < 0.6) {
+      // Standard gap column
+      fr.obstacles.push({ type:'column', x: W+40, gapCenter: clampedCenter, gapSize, emojis });
+    } else if (roll < 0.8) {
+      // Double column close together
+      fr.obstacles.push({ type:'column', x: W+40,  gapCenter: clampedCenter, gapSize, emojis });
+      fr.obstacles.push({ type:'column', x: W+100, gapCenter: clampedCenter, gapSize, emojis });
+    } else {
+      // Column + floating block in the gap
+      fr.obstacles.push({ type:'column', x: W+40, gapCenter: clampedCenter, gapSize, emojis });
+      const floatY = clampedCenter + (Math.random()-0.5) * (gapSize * 0.4);
+      fr.floaters.push({ x: W+40, y: floatY, vy: (Math.random()-0.5)*1.2,
+        emoji: FR_OBS_EMOJIS[Math.floor(Math.random()*FR_OBS_EMOJIS.length)], size: 26 });
+    }
   }
 
-  // Move obstacles
+  // Move obstacles & floaters
   fr.obstacles.forEach(o => o.x -= fr.speed);
   fr.obstacles = fr.obstacles.filter(o => o.x > -60);
+  fr.floaters.forEach(f => { f.x -= fr.speed; f.y += f.vy; if (f.y < 20 || f.y > H-20) f.vy *= -1; });
+  fr.floaters = fr.floaters.filter(f => f.x > -60);
 
   // Collision with obstacles
   const pr = 18;
@@ -2792,6 +2820,15 @@ function updateFoodRun(dt) {
         for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
         return;
       }
+    }
+  }
+  // Collision with floaters
+  for (const f of fr.floaters) {
+    if (Math.hypot(f.x - px, f.y - py) < pr + f.size * 0.5) {
+      fr.dead = true; fr.deathTimer = 0;
+      if (fr.distance > fr.bestDistance) fr.bestDistance = fr.distance;
+      for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
+      return;
     }
   }
 
@@ -2846,8 +2883,15 @@ function drawFoodRun() {
     ctx.setLineDash([]);
   });
 
-  // Chaser — rolling food cluster
-  const chaserEmojis = FR_FOOD_EMOJIS;
+  // Draw floaters
+  fr.floaters.forEach(f => {
+    ctx.font = `${f.size}px serif`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(f.emoji, f.x, f.y);
+  });
+
+  // Chaser — rolling veggie cluster
+  const chaserEmojis = FR_VEG_EMOJIS;
   const cr = 48 + Math.sin(Date.now()*0.008)*4;
   ctx.save();
   ctx.shadowColor = '#ff4444'; ctx.shadowBlur = 30;
