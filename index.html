@@ -191,6 +191,7 @@
     <div id="lb-tabs">
       <button class="lb-tab active" data-tab="timed">⏱️ Timed</button>
       <button class="lb-tab" data-tab="bossrush">💀 Boss Rush</button>
+      <button class="lb-tab" data-tab="foodrun">🏃 Food Run</button>
     </div>
     <p class="sub" id="lb-subtitle">Top scores — 60 second sprint</p>
     <div id="lb-name-row" style="display:none">
@@ -318,13 +319,20 @@ async function fetchScores() {
       );
       const data = await res.json();
       renderScores(Array.isArray(data) ? data : []);
-    } else {
+    } else if (activeTab === 'bossrush') {
       const res = await fetch(
         `${SUPABASE_URL}/rest/v1/boss_rush_times?select=name,time_ms,created_at&order=time_ms.asc&limit=10`,
         { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
       );
       const data = await res.json();
       renderBossRushScores(Array.isArray(data) ? data : []);
+    } else {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/food_run_scores?select=name,distance,created_at&order=distance.desc&limit=10`,
+        { headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` } }
+      );
+      const data = await res.json();
+      renderFoodRunScores(Array.isArray(data) ? data : []);
     }
   } catch { renderScores([], 'error'); }
 }
@@ -378,6 +386,34 @@ function renderScores(rows, mode) {
   }).join('');
 }
 
+async function submitFoodRunScore(name, distance) {
+  if (!SUPABASE_URL.startsWith('http')) { lbStatus.textContent='⚠️ Set up Supabase to save scores.'; return; }
+  lbSubmit.disabled = true;
+  lbStatus.textContent = 'Submitting...';
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/food_run_scores`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json', Prefer: 'return=minimal' },
+      body: JSON.stringify({ name: name.trim().slice(0,20), distance: Math.floor(distance) })
+    });
+    lbStatus.textContent = '✅ Distance saved!';
+    lbNameRow.style.display = 'none';
+    await fetchScores();
+  } catch { lbStatus.textContent = '❌ Could not save distance.'; lbSubmit.disabled = false; }
+}
+
+function renderFoodRunScores(rows) {
+  lbThead.innerHTML = '<tr><th>#</th><th>Player</th><th>Distance</th><th>Date</th></tr>';
+  const medals = ['🥇','🥈','🥉'];
+  if (rows.length === 0) { lbBody.innerHTML = `<tr><td colspan="4" style="color:#555;padding:16px">No runs yet — be the first!</td></tr>`; return; }
+  lbBody.innerHTML = rows.map((r,i) => {
+    const date = new Date(r.created_at).toLocaleDateString();
+    const rank = medals[i] ? `<span class="rank-medal">${medals[i]}</span>` : `#${i+1}`;
+    return `<tr><td>${rank}</td><td>${escHtml(r.name)}</td><td>${r.distance}m</td><td>${date}</td></tr>`;
+  }).join('');
+}
+
 function renderBossRushScores(rows) {
   lbThead.innerHTML = '<tr><th>#</th><th>Player</th><th>Time</th><th>Date</th></tr>';
   const medals = ['🥇','🥈','🥉'];
@@ -389,19 +425,26 @@ function renderBossRushScores(rows) {
   }).join('');
 }
 
+let pendingFoodRun = null;
+
 function setTab(tab) {
   activeTab = tab;
   document.querySelectorAll('.lb-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
-  const isBossRush = tab === 'bossrush';
-  lbSubtitle.textContent = isBossRush ? 'Fastest Boss Rush clears' : 'Top scores — 60 second sprint';
-  // hide submit row when switching tabs (unless relevant pending)
-  const hasSubmit = isBossRush ? pendingTime !== null : pendingScore !== null;
-  if (!hasSubmit) lbNameRow.style.display = 'none';
-  else {
-    lbNameRow.style.display = 'flex';
-    lbSubtitle.textContent = isBossRush
-      ? `Your time: ${fmtTime(pendingTime)} — enter your name to save it!`
-      : `Your score: ${pendingScore} foods in 60s — enter your name to save it!`;
+  if (tab === 'bossrush') {
+    lbSubtitle.textContent = 'Fastest Boss Rush clears';
+    const has = pendingTime !== null;
+    lbNameRow.style.display = has ? 'flex' : 'none';
+    if (has) lbSubtitle.textContent = `Your time: ${fmtTime(pendingTime)} — enter your name to save it!`;
+  } else if (tab === 'foodrun') {
+    lbSubtitle.textContent = 'Longest Food Run distances';
+    const has = pendingFoodRun !== null;
+    lbNameRow.style.display = has ? 'flex' : 'none';
+    if (has) lbSubtitle.textContent = `Your distance: ${Math.floor(pendingFoodRun)}m — enter your name to save it!`;
+  } else {
+    lbSubtitle.textContent = 'Top scores — 60 second sprint';
+    const has = pendingScore !== null;
+    lbNameRow.style.display = has ? 'flex' : 'none';
+    if (has) lbSubtitle.textContent = `Your score: ${pendingScore} foods in 60s — enter your name to save it!`;
   }
   lbStatus.textContent = '';
   fetchScores();
@@ -434,8 +477,19 @@ lbSubmit.onclick = () => {
   const name = lbNameInput.value.trim();
   if (!name) { lbStatus.textContent = '⚠️ Enter a name first.'; return; }
   if (activeTab === 'bossrush' && pendingTime !== null) submitBossRushTime(name, pendingTime);
+  else if (activeTab === 'foodrun' && pendingFoodRun !== null) submitFoodRunScore(name, pendingFoodRun);
   else submitScore(name, pendingScore);
 };
+
+function openFoodRunLeaderboard(distance) {
+  pendingFoodRun = distance;
+  pendingScore = null; pendingTime = null;
+  lbStatus.textContent = '';
+  lbNameInput.value = '';
+  lbSubmit.disabled = false;
+  lbOverlay.classList.add('show');
+  setTab('foodrun');
+}
 lbNameInput.addEventListener('keydown', e => { if (e.key==='Enter') lbSubmit.click(); });
 
 // ── Audio system ──────────────────────────────────────────────
@@ -2889,9 +2943,8 @@ function updateFoodRun(dt) {
   if (hit) {
     fr.dead = true; fr.deathTimer = 0;
     if (fr.distance > fr.bestDistance) fr.bestDistance = fr.distance;
-    // neverHit is still true here if player never touched anything
-    if (fr.neverHit && fr.distance >= 500) unlockAchievement('fr_veggie');
     fr.neverHit = false;
+    setTimeout(() => openFoodRunLeaderboard(fr.distance), 1400);
     for (let i=0;i<20;i++) fr.particles.push({ x:px, y:py, vx:(Math.random()-0.5)*6, vy:(Math.random()-0.5)*6, life:1, color:`hsl(${Math.random()*360},90%,60%)` });
     return;
   }
