@@ -590,10 +590,9 @@ const ACHIEVEMENTS = [
   { id:'pizza_planet',  icon:'🛸', name:'Pizza Planet',      desc:'Go green and defeat the Pizza Boss', secret:true },
   { id:'ketchup_bath',  icon:'🍅', name:'Ketchup Bath',      desc:'Get sauced by the Burger Boss 3 times in one run and still beat him', secret:true },
   { id:'code_red',      icon:'🔴', name:'Code Red',          desc:'Go red and reach 10× size', secret:true },
-  { id:'fr_500',        icon:'🏃', name:'On the Run',         desc:'Survive 500m in Food Run' },
-  { id:'fr_1000',       icon:'💨', name:'Speed Demon Runner', desc:'Survive 1000m in Food Run' },
-  { id:'fr_2000',       icon:'🌪️', name:'Unstoppable Runner', desc:'Survive 2000m in Food Run' },
-  { id:'fr_veggie',     icon:'🥦', name:'Salad Dodger',       desc:'Survive a full Food Run without hitting a single veggie wall', secret:true },
+  { id:'fr_500',        icon:'🏃', name:'On the Run',         desc:'Survive 5000m in Food Run' },
+  { id:'fr_1000',       icon:'💨', name:'Speed Demon Runner', desc:'Survive 10000m in Food Run' },
+  { id:'fr_2000',       icon:'🌪️', name:'Unstoppable Runner', desc:'Survive 20000m in Food Run' },
 ];
 let unlockedAchievements = new Set();
 let triedSwatches = new Set();
@@ -2899,9 +2898,9 @@ function updateFoodRun(dt) {
 
 
   // Distance achievements
-  if (fr.distance >= 500)  unlockAchievement('fr_500');
-  if (fr.distance >= 1000) unlockAchievement('fr_1000');
-  if (fr.distance >= 2000) unlockAchievement('fr_2000');
+  if (fr.distance >= 5000)  unlockAchievement('fr_500');
+  if (fr.distance >= 10000) unlockAchievement('fr_1000');
+  if (fr.distance >= 20000) unlockAchievement('fr_2000');
 
   // Particles
   fr.particles.forEach(p => { p.x+=p.vx; p.y+=p.vy; p.life-=0.04; });
