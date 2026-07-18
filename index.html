@@ -3734,7 +3734,7 @@ function startPt2(){
 function initPt2(){
   pt2={
     px:500,py:PT2_H/2, pvx:0,pvy:0,
-    health:100,maxHealth:100, radius:22, score:0, invincible:0,
+    health:300,maxHealth:300, radius:22, score:0, invincible:0,
     camX:500,camY:PT2_H/2,
     zone:1, unlockedZones:new Set([1]), keysHeld:new Set(),
     foods:[],bosses:[],powerups:[],chests:[],portals:[],
@@ -4450,10 +4450,10 @@ function drawPt2HUD(){
   // Score
   ctx.font='bold 17px sans-serif';ctx.textAlign='right';ctx.fillStyle='#fbbf24';
   ctx.fillText(`⭐ ${pt2.score}`,W-12,26);
-  // Zone
+  // Zone (pushed below mobile toggle button)
   const cz=PT2_ZONES[pt2.zone-1];
   ctx.font='13px sans-serif';ctx.textAlign='left';ctx.fillStyle=cz?.accent||'#fff';
-  ctx.fillText(cz?.name||'',12,22);
+  ctx.fillText(cz?.name||'',12,48);
   // Effects
   let ex=12;
   const efx=[];
