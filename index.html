@@ -536,6 +536,11 @@ const TRACKS = {
   bacteria: {seq:[174,185,174,155,164,174,155,185], bpm:128, wave:'sine', vol:0.034},
   bacterialow:{seq:[155,164,155,138,147,155,138,164],bpm:155,wave:'sine',vol:0.04},
   secret:   {seq:[523,659,784,659,523,440,494,523], bpm:138, wave:'triangle', vol:0.036},
+  pt2_field:{seq:[329,392,440,392,349,329,294,329], bpm:116, wave:'triangle', vol:0.034},
+  pt2_toxic:{seq:[233,277,196,233,220,196,277,220], bpm:138, wave:'square',   vol:0.036},
+  pt2_spice:{seq:[220,247,220,185,196,220,175,196], bpm:155, wave:'sawtooth', vol:0.040},
+  pt2_final:{seq:[147,165,147,131,139,147,123,131], bpm:174, wave:'sawtooth', vol:0.044},
+  pt2_boss: {seq:[110,0,123,0,110,98,0,110],        bpm:188, wave:'square',   vol:0.050},
 };
 let _musicTheme=null, _musicStep=0, _musicTimer=null;
 
@@ -651,7 +656,14 @@ const ACHIEVEMENTS = [
   { id:'pt2_start',    icon:'🗺️', name:'Into the Unknown',    desc:'Begin Munch Munch Pt 2' },
   { id:'pt2_boss',     icon:'💥', name:'Boss Slayer',          desc:'Defeat your first boss in Pt 2' },
   { id:'pt2_explorer', icon:'🧭', name:'Explorer',             desc:'Reach all 4 zones in Pt 2' },
-  { id:'pt2_clear',    icon:'🏆', name:'True Hero',            desc:'Defeat The Chef and complete Munch Munch Pt 2', secret:false },
+  { id:'pt2_clear',        icon:'🏆', name:'True Hero',         desc:'Defeat The Chef and complete Munch Munch Pt 2' },
+  { id:'pt2_sharpshooter',icon:'🎯', name:'Sharpshooter',      desc:'Land 50 shots on bosses in Pt 2' },
+  { id:'pt2_10bosses',    icon:'💀', name:'Boss Collector',     desc:'Defeat 10 total bosses in Pt 2' },
+  { id:'pt2_collector',   icon:'📦', name:'Treasure Hunter',   desc:'Open 10 chests in Pt 2' },
+  { id:'pt2_untouchable', icon:'🌟', name:'Untouchable',        desc:'Defeat a zone boss without taking damage', secret:true },
+  { id:'pt2_glutton',     icon:'🐷', name:'Glutton',            desc:'Score 5000 points in Pt 2' },
+  { id:'pt2_golden',      icon:'💎', name:'Gold Rush',          desc:'Collect 10 golden foods in Pt 2' },
+  { id:'pt2_survivor',    icon:'🩹', name:'Survivor',           desc:'Reach Zone 4 with full health', secret:true },
 ];
 let unlockedAchievements = new Set();
 let triedSwatches = new Set();
@@ -3179,8 +3191,8 @@ function drawMenu() {
     ctx.shadowColor=`rgba(255,215,0,${pulse})`; ctx.shadowBlur=18*pulse;
     drawBtn(cx+  85, H/2-10, 130, 62, '🍔 Pt.2',   '#b8860b','#5c4000');
     ctx.shadowBlur=0;
-    ctx.font='11px Segoe UI'; ctx.fillStyle='#666'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText('Coming soon...', cx+150, H/2+60);
+    ctx.font='11px Segoe UI'; ctx.fillStyle='#fbbf24'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText('New adventure!', cx+150, H/2+60);
   } else {
     drawBtn(cx-145, H/2-10, 130, 62, '⏱️ Timed',   '#6c63ff','#4c1d95');
     drawBtn(cx+ 15, H/2-10, 130, 62, '♾️ Endless', '#e84393','#7b1450');
