@@ -2800,7 +2800,7 @@ function updateFoodRun(dt) {
   }
 
   // Increase speed over time
-  fr.speed = Math.min(14, 4.5 + fr.distance * 0.0018);
+  fr.speed = Math.min(10, 4.5 + fr.distance * 0.0012);
   fr.distance += fr.speed;
 
   // Player vertical movement
@@ -2857,13 +2857,14 @@ function updateFoodRun(dt) {
       // A row of veggies that oscillates up and down — dodge above or below
       const snakeY = H*0.2 + Math.random()*H*0.6;
       const count = 6 + Math.floor(Math.random()*4);
-      fr.obstacles.push({ type:'snake', x:W+40, baseY:snakeY, count,
-        phase: Math.random()*Math.PI*2, amp: H*0.18, emoji:veg() });
+      fr.obstacles.push({ type:'snake', x:W+40, baseY:H/2, count,
+        phase: Math.random()*Math.PI*2, amp: H*0.40, emoji:veg() });
 
     } else if (type === 'spinner') {
       // Veggies spinning around a center — weave through the gaps
-      fr.obstacles.push({ type:'spinner', x:W+60, cx:W+60, cy:H/2,
-        r:H*0.22, count:4, angle:Math.random()*Math.PI*2,
+      const spinCy = H*0.25 + Math.random()*H*0.5;
+      fr.obstacles.push({ type:'spinner', x:W+60, cx:W+60, cy:spinCy,
+        r:H*0.30, count:5, angle:Math.random()*Math.PI*2,
         speed:0.04+Math.random()*0.03, emoji:veg() });
 
     } else if (type === 'zigzag') {
@@ -2927,10 +2928,10 @@ function updateFoodRun(dt) {
     } else if (o.type === 'zigzag') {
       for (let i = 0; i < 8; i++) {
         const zx = o.x + i * 44;
-        const zy = H/2 + Math.sin(o.phase + i * 1.1) * H * 0.32 * o.dir;
+        const zy = H/2 + Math.sin(o.phase + i * 1.1) * H * 0.43 * o.dir;
         if (Math.hypot(px - zx, py - zy) < pr + 16) { hit = true; break; }
         // second row offset
-        const zy2 = H/2 - Math.sin(o.phase + i * 1.1 + Math.PI) * H * 0.32 * o.dir;
+        const zy2 = H/2 - Math.sin(o.phase + i * 1.1 + Math.PI) * H * 0.43 * o.dir;
         if (Math.hypot(px - zx, py - zy2) < pr + 16) { hit = true; break; }
       }
       if (hit) break;
@@ -3033,8 +3034,8 @@ function drawFoodRun() {
       ctx.font = '28px serif';
       for (let i = 0; i < 8; i++) {
         const zx = o.x + i*44;
-        ctx.fillText(o.emoji, zx, H/2 + Math.sin(o.phase + i*1.1)*H*0.32*o.dir);
-        ctx.fillText(o.emoji, zx, H/2 - Math.sin(o.phase + i*1.1 + Math.PI)*H*0.32*o.dir);
+        ctx.fillText(o.emoji, zx, H/2 + Math.sin(o.phase + i*1.1)*H*0.43*o.dir);
+        ctx.fillText(o.emoji, zx, H/2 - Math.sin(o.phase + i*1.1 + Math.PI)*H*0.43*o.dir);
       }
     }
   });
