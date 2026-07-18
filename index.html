@@ -891,6 +891,7 @@ const SHOOT_BTN_R = 38;
 let leftHandMode = false;
 // Shoot button: bottom-right normally, bottom-left in left-hand mode
 function shootBtnX() { return leftHandMode ? SHOOT_BTN_R + 24 : W - SHOOT_BTN_R - 24; }
+function shootBtnX2(){ return leftHandMode ? SHOOT_BTN_R + 24 : W - SHOOT_BTN_R - 24; }
 function shootBtnY() { return H - SHOOT_BTN_R - 24; }
 
 // Joystick: dynamic — spawns where you touch on the LEFT half of screen
@@ -1008,6 +1009,10 @@ canvas.addEventListener('touchstart', e => {
     if (gameState === 'playing') {
       // Shoot button (right side normally, left in left-hand mode)
       const shootSide = leftHandMode ? tx < W / 2 : tx > W / 2;
+      if (gameMode==='pt2' && pt2 && shootSide) {
+        const bx=shootBtnX2(),by=H-SHOOT_BTN_R-24;
+        if(Math.hypot(tx-bx,ty-by)<SHOOT_BTN_R+20&&pt2.shootCooldown<=0){pt2PlayerShoot();continue;}
+      }
       if (burgerBoss && shootBtn.touchId === null && shootSide) {
         const sx = shootBtnX(), sy = shootBtnY();
         if (Math.hypot(tx - sx, ty - sy) < SHOOT_BTN_R + 20) {
@@ -3681,12 +3686,12 @@ function loop(ts) {
 // =============================================
 // MUNCH MUNCH PT 2
 // =============================================
-const PT2_W = 5200, PT2_H = 3200;
+const PT2_W = 10000, PT2_H = 6000;
 const PT2_ZONES = [
-  {id:1, name:'🌿 Snack Fields',   x:0,    w:1400, bg:'#0a160a', accent:'#4ade80'},
-  {id:2, name:'☠️  Toxic Tundra',  x:1400, w:1300, bg:'#0a0a1a', accent:'#c084fc'},
-  {id:3, name:'🔥 Spice Mines',    x:2700, w:1300, bg:'#1a0a0a', accent:'#fb923c'},
-  {id:4, name:'👨‍🍳 Final Kitchen', x:4000, w:1200, bg:'#050505', accent:'#fbbf24'},
+  {id:1, name:'🌿 Snack Fields',   x:0,    w:2600, bg:'#0a160a', accent:'#4ade80', music:'pt2_field'},
+  {id:2, name:'☠️  Toxic Tundra',  x:2600, w:2400, bg:'#0a0a1a', accent:'#c084fc', music:'pt2_toxic'},
+  {id:3, name:'🔥 Spice Mines',    x:5000, w:2400, bg:'#1a0a0a', accent:'#fb923c', music:'pt2_spice'},
+  {id:4, name:'👨‍🍳 Final Kitchen', x:7400, w:2600, bg:'#050505', accent:'#fbbf24', music:'pt2_final'},
 ];
 const PT2_FOODS_NORMAL = ['🍕','🍔','🌮','🍟','🍩','🍦','🎂','🍪','🍫','🍭','🧁','🥪','🥨','🧆','🍱'];
 const PT2_FOODS_POISON = ['🍄','💊','🧪'];
@@ -3742,6 +3747,9 @@ function initPt2(){
     dead:false,victory:false,
     zoneAnnounce:null,bossWarning:null,damageFlash:0,
     zonesVisited:new Set([1]),
+    playerBullets:[],shootCooldown:0,lastAimX:1,lastAimY:0,
+    shotsHit:0,totalBossesDefeated:0,noDamageBoss:true,
+    chestsOpened:0,goldenEaten:0,
   };
   pt2PopulateWorld();
   pt2SetupPortals();
@@ -3827,8 +3835,9 @@ function pt2SpawnBoss(type){
   if(!def||pt2.bosses.length>=3)return;
   if(pt2.bosses.find(b=>b.type===type))return;
   const z=def.zone>0?pt2ZoneDef(def.zone):pt2ZoneDef(pt2.zone);
-  const wx=z.x+z.w*0.2+Math.random()*z.w*0.6;
-  const wy=PT2_H*0.15+Math.random()*PT2_H*0.7;
+  // Spawn in far 40% of the zone so player must explore to find them
+  const wx=z.x+z.w*0.6+Math.random()*z.w*0.35;
+  const wy=PT2_H*0.1+Math.random()*PT2_H*0.8;
   pt2.bosses.push({
     type,wx,wy,vx:0,vy:0,hp:def.maxHp,maxHp:def.maxHp,...def,
     timer:0,attackCooldown:0,angle:0,orbitAngle:0,
@@ -3838,6 +3847,7 @@ function pt2SpawnBoss(type){
     jumpTimer:200,jumpVisible:true,
   });
   pt2.bossWarning={text:`⚠️ ${def.name} appeared!`,timer:200};
+  setMusic('pt2_boss');
 }
 
 function pt2Announce(title,sub=''){pt2.zoneAnnounce={title,sub,timer:260};}
@@ -3850,6 +3860,7 @@ function updatePt2(){
   pt2UpdateFoods();
   pt2UpdateBosses();
   pt2UpdateProjectiles();
+  pt2UpdatePlayerBullets();
   pt2UpdatePowerups();
   pt2UpdateChests();
   pt2UpdateParticles();
@@ -3868,10 +3879,13 @@ function pt2UpdatePlayer(){
   if(keys['ArrowDown']||keys['s']||keys['S'])dy+=1;
   if(mobileMode&&joystick.active){dx=joystick.dx;dy=joystick.dy;}
   const mag=Math.hypot(dx,dy);
-  if(mag>0){dx/=mag;dy/=mag;}
+  if(mag>0){dx/=mag;dy/=mag;pt2.lastAimX=dx;pt2.lastAimY=dy;}
   let spd=3.2+pt2.upgrades.speed*0.5;
   if(pt2.speedBoost>0)spd*=1.6;
   pt2.px+=dx*spd; pt2.py+=dy*spd;
+  // Shoot — SPACE on keyboard
+  if(pt2.shootCooldown>0)pt2.shootCooldown--;
+  if((keys[' ']||keys['z']||keys['Z'])&&pt2.shootCooldown<=0)pt2PlayerShoot();
   // Clamp to unlocked world
   const maxX=pt2GetMaxX();
   pt2.px=Math.max(pt2.radius,Math.min(maxX-pt2.radius,pt2.px));
@@ -3890,8 +3904,9 @@ function pt2UpdatePlayer(){
       const z=pt2ZoneDef(newZone);
       pt2Announce(z.name,pt2GetZoneHint(newZone));
       pt2TriggerZoneBosses(newZone);
-      if(pt2.zonesVisited.size>=4)unlockAchievement('pt2_explorer');
+      if(pt2.zonesVisited.size>=4){unlockAchievement('pt2_explorer');if(pt2.health>=pt2.maxHealth)unlockAchievement('pt2_survivor');}
     }
+    setMusic(pt2ZoneDef(newZone).music||'pt2_field');
   }
 }
 
@@ -4065,11 +4080,46 @@ function pt2UpdateBosses(){
 
 function pt2Proj(wx,wy,vx,vy,emoji,life){pt2.projectiles.push({wx,wy,vx,vy,emoji,r:13,life});}
 
+function pt2PlayerShoot(){
+  const spd=9+pt2.upgrades.speed*0.5;
+  const dmg=18+pt2.upgrades.scoreBonus*6;
+  const emoji=PT2_FOODS_NORMAL[0|Math.random()*PT2_FOODS_NORMAL.length];
+  pt2.playerBullets.push({wx:pt2.px,wy:pt2.py,vx:pt2.lastAimX*spd,vy:pt2.lastAimY*spd,emoji,r:14,life:90,dmg});
+  pt2.shootCooldown=22;
+  sfx(520,'sine',0.07,0.18,800);
+}
+
+function pt2UpdatePlayerBullets(){
+  for(let i=pt2.playerBullets.length-1;i>=0;i--){
+    const b=pt2.playerBullets[i];
+    b.wx+=b.vx; b.wy+=b.vy; b.life--;
+    let hit=false;
+    for(const boss of pt2.bosses){
+      if(Math.hypot(b.wx-boss.wx,b.wy-boss.wy)<boss.r+b.r){
+        boss.hp-=b.dmg;
+        pt2P(boss.wx,boss.wy,'#fca5a5',4);
+        pt2FloatText(boss.wx,boss.wy-24,'-'+b.dmg,'#f87171');
+        pt2.shotsHit++;
+        if(pt2.shotsHit>=50)unlockAchievement('pt2_sharpshooter');
+        hit=true; break;
+      }
+    }
+    if(hit||b.life<=0||b.wx<0||b.wx>PT2_W||b.wy<0||b.wy>PT2_H)
+      pt2.playerBullets.splice(i,1);
+  }
+}
+
 function pt2BossDefeated(b){
   pt2FloatText(b.wx,b.wy,'💥 DEFEATED!','#fbbf24');
   pt2P(b.wx,b.wy,'#fbbf24',24);
   pt2.score+=b.zone===0?300:600;
+  pt2.totalBossesDefeated=(pt2.totalBossesDefeated||0)+1;
+  if(pt2.noDamageBoss){unlockAchievement('pt2_untouchable');}
+  pt2.noDamageBoss=true;
   unlockAchievement('pt2_boss');
+  if(pt2.totalBossesDefeated>=10)unlockAchievement('pt2_10bosses');
+  // Return to zone music if no more bosses
+  if(pt2.bosses.length<=1) setMusic(pt2ZoneDef(pt2.zone).music||'pt2_field');
   if(b.zone>0){
     pt2.zoneBossesDefeated[b.zone].add(b.type);
     const reqs=PT2_ZONE_REQS[b.zone];
@@ -4334,6 +4384,14 @@ function drawPt2(){
     ctx.globalAlpha=p.life;ctx.fillStyle=p.color;ctx.beginPath();ctx.arc(sx,sy,p.size,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;
   });
 
+  // Player bullets
+  pt2.playerBullets.forEach(b=>{
+    if(!pt2Vis(b.wx,b.wy))return;
+    const[sx,sy]=pt2WS(b.wx,b.wy);
+    ctx.font='18px serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.save();ctx.globalAlpha=0.9;ctx.fillText(b.emoji,sx,sy);ctx.restore();
+  });
+
   // Player
   {
     const[sx,sy]=pt2WS(pt2.px,pt2.py);const r=pt2.radius;
@@ -4341,14 +4399,29 @@ function drawPt2(){
       ctx.save();ctx.globalAlpha=0.38+Math.sin(Date.now()*0.012)*0.18;
       ctx.strokeStyle='#60a5fa';ctx.lineWidth=3;ctx.beginPath();ctx.arc(sx,sy,r+14,0,Math.PI*2);ctx.stroke();ctx.restore();
     }
-    ctx.save();
-    if(pt2.invincible>0&&Math.floor(Date.now()/75)%2===0)ctx.globalAlpha=0.35;
+    if(pt2.invincible>0&&Math.floor(Date.now()/75)%2===0){ctx.restore();return;}
     const sw=SWATCHES[selectedSwatch];
+    const aimA=Math.atan2(pt2.lastAimY,pt2.lastAimX);
+    ctx.save();
     ctx.translate(sx,sy);
-    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=sw.l;ctx.fill();
-    ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.strokeStyle=sw.d;ctx.lineWidth=2;ctx.stroke();
-    ctx.font=`${r*0.85}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('😋',0,2);
-    ctx.globalAlpha=1;ctx.restore();
+    ctx.shadowColor=sw.l;ctx.shadowBlur=18;
+    drawPlayerBody(r,1,1,sw);
+    ctx.shadowBlur=0;
+    // Eyes facing aim direction
+    const ex=Math.cos(aimA)*r*0.34,ey=Math.sin(aimA)*r*0.34;
+    const esp=r*0.27,px2=-Math.sin(aimA)*esp,py2=Math.cos(aimA)*esp;
+    for(let s=-1;s<=1;s+=2){
+      const ex2=ex+px2*s,ey2=ey+py2*s;
+      ctx.fillStyle='#fff';ctx.beginPath();ctx.arc(ex2,ey2,r*0.17,0,Math.PI*2);ctx.fill();
+      ctx.fillStyle='#222';ctx.beginPath();ctx.arc(ex2+Math.cos(aimA)*r*0.05,ey2+Math.sin(aimA)*r*0.05,r*0.085,0,Math.PI*2);ctx.fill();
+    }
+    // Shoot cooldown arc indicator
+    if(pt2.shootCooldown>0){
+      ctx.globalAlpha=0.45;ctx.strokeStyle='#fff';ctx.lineWidth=2;
+      ctx.beginPath();ctx.arc(0,0,r+6,(pt2.shootCooldown/22)*Math.PI*2-Math.PI/2,-Math.PI/2);ctx.stroke();
+      ctx.globalAlpha=1;
+    }
+    ctx.restore();
   }
 
   // Damage flash overlay
@@ -4398,6 +4471,23 @@ function drawPt2HUD(){
   if(pt2.keysHeld.size>0){
     ctx.font='15px sans-serif';ctx.textAlign='right';let kx=W-12;
     [...pt2.keysHeld].forEach(k=>{ctx.fillStyle='#fbbf24';ctx.fillText(`🗝️Z${k}`,kx,H-12);kx-=45;});
+  }
+  // Mobile shoot button
+  if(mobileMode){
+    const bx=shootBtnX2(),by=H-SHOOT_BTN_R-24;
+    ctx.save();
+    const coolFrac=pt2.shootCooldown/22;
+    ctx.globalAlpha=0.75;
+    ctx.fillStyle=coolFrac>0?'#374151':'#16a34a';
+    ctx.beginPath();ctx.arc(bx,by,SHOOT_BTN_R,0,Math.PI*2);ctx.fill();
+    if(coolFrac>0){
+      ctx.fillStyle='#4ade80';
+      ctx.beginPath();ctx.moveTo(bx,by);ctx.arc(bx,by,SHOOT_BTN_R,-Math.PI/2,-Math.PI/2+2*Math.PI*(1-coolFrac));ctx.closePath();ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    ctx.font=`${SHOOT_BTN_R*1.1}px serif`;ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('🍕',bx,by);
+    ctx.restore();
   }
   // Boss warning
   if(pt2.bossWarning){
